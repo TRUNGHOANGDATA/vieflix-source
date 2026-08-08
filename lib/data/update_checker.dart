@@ -7,7 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 /// Phiên bản app hiện tại. MỖI lần phát hành bản mới phải TĂNG số này cho
 /// khớp tag trên GitHub (vd tag `v1.0.1` -> đặt '1.0.1').
-const String kAppVersion = '1.0.4';
+const String kAppVersion = '1.0.5';
 
 /// Repo GitHub PUBLIC chỉ dùng để chứa bản tải, dạng 'chu-repo/ten-repo'.
 /// Để rỗng nếu chưa cấu hình -> app bỏ qua kiểm tra cập nhật (không lỗi).
@@ -111,7 +111,14 @@ class UpdateChecker {
       if (res.statusCode != 200) return null;
       final total = res.contentLength ?? 0;
 
-      final dir = await getApplicationSupportDirectory();
+      // Lưu APK ra bộ nhớ NGOÀI của app (trình cài đặt đọc dễ hơn bộ nhớ trong,
+      // lại còn nhiều dung lượng) -> tránh "App not installed" trên TV box.
+      Directory dir;
+      try {
+        dir = (await getExternalStorageDirectory()) ?? await getApplicationSupportDirectory();
+      } catch (_) {
+        dir = await getApplicationSupportDirectory();
+      }
       final file = File('${dir.path}${Platform.pathSeparator}vieflix-update.apk');
       // Xoá file cũ nếu còn.
       if (await file.exists()) {
@@ -128,6 +135,11 @@ class UpdateChecker {
       }
       await sink.flush();
       await sink.close();
+      // Kiểm tra đã tải đủ (file thiếu -> trình cài báo "App not installed").
+      if (total > 0 && (await file.length()) != total) {
+        try { await file.delete(); } catch (_) {}
+        return null;
+      }
       return file;
     } catch (_) {
       return null;
