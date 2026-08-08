@@ -11,6 +11,7 @@ class PlayerScreen extends StatefulWidget {
   final String movieName, posterUrl, embedUrl;
   final List<Episode> episodes;
   final int startIndex;
+  final int totalEpisodes; // tổng số tập full của phim (kể cả chưa ra)
   final void Function(Episode) onEpisodeChange;
   const PlayerScreen({
     super.key,
@@ -19,6 +20,7 @@ class PlayerScreen extends StatefulWidget {
     required this.embedUrl,
     required this.episodes,
     required this.startIndex,
+    required this.totalEpisodes,
     required this.onEpisodeChange,
   });
   @override
@@ -68,7 +70,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final total = widget.episodes.length;
+    final total = widget.totalEpisodes > widget.episodes.length ? widget.totalEpisodes : widget.episodes.length;
     final epName = widget.episodes.isNotEmpty ? widget.episodes[_idx].name : '';
     return Scaffold(
       backgroundColor: Colors.black,

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/catalog.dart';
+import '../models/movie.dart';
 import '../state/providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/movie_card.dart';
 import '../widgets/filter_bar.dart';
+import '../widgets/async_view.dart';
 import 'detail_screen.dart';
 
 class BrowseScreen extends ConsumerStatefulWidget {
@@ -14,7 +16,8 @@ class BrowseScreen extends ConsumerStatefulWidget {
 }
 
 class _BrowseScreenState extends ConsumerState<BrowseScreen> {
-  BrowseQuery _q = const BrowseQuery('type', 'phim-bo');
+  BrowseQuery _q = const BrowseQuery('all', '');
+  String _keyword = '';
   final _scroll = ScrollController();
 
   @override
@@ -35,6 +38,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
 
   String _label(BrowseQuery q) {
     switch (q.kind) {
+      case 'all': return 'Tất cả phim';
       case 'type': return kTypes.firstWhere((e) => e.slug == q.value, orElse: () => CatalogEntry(q.value, q.value)).label;
       case 'genre': return kGenres.firstWhere((e) => e.slug == q.value, orElse: () => CatalogEntry(q.value, q.value)).label;
       case 'country': return kCountries.firstWhere((e) => e.slug == q.value, orElse: () => CatalogEntry(q.value, q.value)).label;
@@ -42,8 +46,63 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
     }
   }
 
+  Widget _grid(List<Movie> items) => GridView.builder(
+        controller: _scroll,
+        padding: const EdgeInsets.all(12),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 170, childAspectRatio: 0.6, crossAxisSpacing: 8, mainAxisSpacing: 8),
+        itemCount: items.length,
+        itemBuilder: (c, i) {
+          final m = items[i];
+          return MovieCard(movie: m, onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => DetailScreen(slug: m.slug, title: m.name))));
+        },
+      );
+
   @override
   Widget build(BuildContext context) {
+    final searching = _keyword.trim().length >= 2;
+    return Column(children: [
+      // Ô gõ tên phim
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+        child: TextField(
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: 'Gõ tên phim để tìm...',
+            hintStyle: const TextStyle(color: Colors.white38),
+            prefixIcon: const Icon(Icons.search, color: Colors.white54),
+            suffixIcon: _keyword.isNotEmpty
+                ? IconButton(icon: const Icon(Icons.clear, color: Colors.white54), onPressed: () => setState(() => _keyword = ''))
+                : null,
+            filled: true, fillColor: kSurface, isDense: true,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+          ),
+          onChanged: (v) => setState(() => _keyword = v),
+        ),
+      ),
+      if (!searching) FilterBar(current: _q, onChanged: (q) => setState(() => _q = q)),
+      if (!searching)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: Row(children: [
+            Text(_label(_q), style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          ]),
+        ),
+      Expanded(
+        child: searching
+            ? AsyncView(
+                value: ref.watch(searchProvider(_keyword)),
+                onRetry: () => ref.invalidate(searchProvider(_keyword)),
+                builder: (list) => list.isEmpty
+                    ? const Center(child: Text('Không tìm thấy phim', style: TextStyle(color: Colors.white38)))
+                    : _grid(list),
+              )
+            : _browseBody(),
+      ),
+    ]);
+  }
+
+  Widget _browseBody() {
     final st = ref.watch(browseProvider(_q));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -53,28 +112,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
       }
     });
     return Column(children: [
-      FilterBar(current: _q, onChanged: (q) => setState(() => _q = q)),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        child: Row(children: [
-          Text(_label(_q), style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(width: 8),
-          Text('(${st.items.length} phim)', style: const TextStyle(color: Colors.white38, fontSize: 13)),
-        ]),
-      ),
-      Expanded(
-        child: GridView.builder(
-          controller: _scroll,
-          padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 170, childAspectRatio: 0.6, crossAxisSpacing: 8, mainAxisSpacing: 8),
-          itemCount: st.items.length,
-          itemBuilder: (c, i) {
-            final m = st.items[i];
-            return MovieCard(movie: m, onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => DetailScreen(slug: m.slug, title: m.name))));
-          },
-        ),
-      ),
+      Expanded(child: _grid(st.items)),
       if (st.loading) const Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator(color: kRed)),
     ]);
   }

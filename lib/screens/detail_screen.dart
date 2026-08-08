@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/movie.dart';
@@ -19,6 +20,28 @@ class DetailScreen extends ConsumerStatefulWidget {
 
 class _DetailScreenState extends ConsumerState<DetailScreen> {
   int? _userServer; // null = chưa chọn -> dùng mặc định (ưu tiên Thuyết minh)
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    super.dispose();
+  }
+
+  bool _onKey(KeyEvent e) {
+    if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+        return true;
+      }
+    }
+    return false;
+  }
 
   int _defaultServer(List<ServerGroup> servers) {
     for (int i = 0; i < servers.length; i++) {
@@ -206,6 +229,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         embedUrl: ep.embed,
         episodes: eps,
         startIndex: eps.indexOf(ep),
+        totalEpisodes: d.base.totalEpisodes > eps.length ? d.base.totalEpisodes : eps.length,
         onEpisodeChange: (e) => _saveAndRefresh(d, s, e, poster),
       ),
     ));

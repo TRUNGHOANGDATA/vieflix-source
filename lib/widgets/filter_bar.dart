@@ -16,6 +16,17 @@ class FilterBar extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(children: [
+        Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: ChoiceChip(
+            label: const Text('Tất cả'),
+            selected: current.kind == 'all',
+            selectedColor: kRed,
+            backgroundColor: kSurface,
+            labelStyle: const TextStyle(color: Colors.white),
+            onSelected: (_) => onChanged(const BrowseQuery('all', '')),
+          ),
+        ),
         _dd('Loại', 'type', {for (final t in kTypes) t.slug: t.label}),
         _dd('Thể loại', 'genre', {for (final g in kGenres) g.slug: g.label}),
         _dd('Quốc gia', 'country', {for (final c in kCountries) c.slug: c.label}),

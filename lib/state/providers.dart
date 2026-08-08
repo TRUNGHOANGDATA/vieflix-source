@@ -69,6 +69,7 @@ class BrowseNotifier extends StateNotifier<BrowseState> {
     Paginated<Movie> res;
     try {
       switch (q.kind) {
+        case 'all': res = await api.latest(page: next); break;
         case 'type': res = await api.listByType(q.value, page: next); break;
         case 'genre': res = await api.byGenre(q.value, page: next); break;
         case 'country': res = await api.byCountry(q.value, page: next); break;
