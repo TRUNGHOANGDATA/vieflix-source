@@ -35,6 +35,13 @@ class _HeroCarouselState extends State<HeroCarousel> {
     super.dispose();
   }
 
+  void _go(int i) {
+    if (!_controller.hasClients || widget.movies.isEmpty) return;
+    final n = widget.movies.length;
+    final target = (i % n + n) % n;
+    _controller.animateToPage(target, duration: const Duration(milliseconds: 400), curve: Curves.easeInOut);
+  }
+
   @override
   Widget build(BuildContext context) {
     final movies = widget.movies;
@@ -52,7 +59,7 @@ class _HeroCarouselState extends State<HeroCarousel> {
             onInfo: () => widget.onOpen(movies[i]),
           ),
         ),
-        // Chấm chỉ vị trí
+        // Chấm chỉ vị trí + nút chuyển trái/phải (góc phải dưới)
         Positioned(
           bottom: 20, right: 40,
           child: Row(children: [
@@ -65,9 +72,29 @@ class _HeroCarouselState extends State<HeroCarousel> {
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
+            const SizedBox(width: 16),
+            _arrow(Icons.chevron_left, () => _go(_current - 1)),
+            const SizedBox(width: 8),
+            _arrow(Icons.chevron_right, () => _go(_current + 1)),
           ]),
         ),
       ]),
+    );
+  }
+
+  Widget _arrow(IconData icon, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      customBorder: const CircleBorder(),
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white70, width: 1.5),
+          color: Colors.black26,
+        ),
+        child: Icon(icon, color: Colors.white, size: 24),
+      ),
     );
   }
 }

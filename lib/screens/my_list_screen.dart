@@ -60,7 +60,7 @@ class _MyListScreenState extends ConsumerState<MyListScreen> {
             ? const Center(child: Text('Không có phim trong thể loại này', style: TextStyle(color: Colors.white38)))
             : GridView.builder(
                 padding: const EdgeInsets.all(12),
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 170, childAspectRatio: 0.6, crossAxisSpacing: 8, mainAxisSpacing: 8),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 200, childAspectRatio: 0.6, crossAxisSpacing: 8, mainAxisSpacing: 8),
                 itemCount: filtered.length,
                 itemBuilder: (c, i) {
                   final m = filtered[i];

@@ -11,7 +11,7 @@ final appTheme = ThemeData(
     primary: kRed,
     surface: kSurface,
   ),
-  fontFamily: 'Segoe UI',
+  fontFamily: 'Be Vietnam Pro',
   useMaterial3: true,
   elevatedButtonTheme: ElevatedButtonThemeData(
     style: ElevatedButton.styleFrom(

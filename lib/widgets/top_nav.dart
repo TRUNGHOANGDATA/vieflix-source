@@ -9,7 +9,7 @@ class NavItem {
 
 const kNavItems = [
   NavItem(Icons.home, 'Trang chủ'),
-  NavItem(Icons.grid_view, 'Duyệt'),
+  NavItem(Icons.grid_view, 'Thư viện phim'),
   NavItem(Icons.search, 'Tìm kiếm'),
   NavItem(Icons.favorite, 'Yêu thích'),
   NavItem(Icons.settings, 'Cài đặt'),
@@ -31,7 +31,7 @@ class TopNav extends StatelessWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(children: [
-        const Text('PHIM', style: TextStyle(color: kRed, fontWeight: FontWeight.bold, fontSize: 24, letterSpacing: 1)),
+        const Text('PHIM MỚI', style: TextStyle(color: kRed, fontWeight: FontWeight.bold, fontSize: 24, letterSpacing: 1)),
         const SizedBox(width: 32),
         for (int i = 0; i < kNavItems.length; i++) _item(i),
       ]),

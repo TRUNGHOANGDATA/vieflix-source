@@ -12,7 +12,7 @@ Future<void> main() async {
   runApp(ProviderScope(
     overrides: [
       storeProvider.overrideWithValue(store),
-      tmdbKeyProvider.overrideWith((ref) => store.tmdbKey),
+      tmdbKeyProvider.overrideWith((ref) => store.tmdbKey.isNotEmpty ? store.tmdbKey : kDefaultTmdbKey),
     ],
     child: const MyApp(),
   ));

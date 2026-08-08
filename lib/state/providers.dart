@@ -14,8 +14,11 @@ final homeRefreshProvider = StateProvider<int>((ref) => 0);
 /// storeProvider được override ở main sau khi init().
 final storeProvider = Provider<LocalStore>((ref) => throw UnimplementedError());
 
+/// Khóa TMDB mặc định (khóa cá nhân người dùng cung cấp; có thể đổi ở Cài đặt).
+const kDefaultTmdbKey = '8ef7373103c6691be809f158bee8b65e';
+
 /// Khóa TMDB (override ở main từ store; cập nhật khi lưu ở Cài đặt).
-final tmdbKeyProvider = StateProvider<String>((ref) => '');
+final tmdbKeyProvider = StateProvider<String>((ref) => kDefaultTmdbKey);
 
 /// Điểm rating TMDB theo tên (ưu tiên tên gốc). Null nếu chưa có khóa/không khớp.
 final tmdbRatingProvider = FutureProvider.family<TmdbResult?, String>((ref, query) async {

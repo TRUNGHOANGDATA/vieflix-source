@@ -37,7 +37,7 @@ class MovieRow extends StatelessWidget {
         ]),
       ),
       SizedBox(
-        height: 250,
+        height: 300,
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -63,7 +63,7 @@ class _SeeMoreCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 150,
+        width: 180,
         margin: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
           color: kSurface,

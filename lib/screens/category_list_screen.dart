@@ -43,7 +43,7 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
         controller: _scroll,
         padding: const EdgeInsets.all(12),
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 170, childAspectRatio: 0.6, crossAxisSpacing: 8, mainAxisSpacing: 8),
+            maxCrossAxisExtent: 200, childAspectRatio: 0.6, crossAxisSpacing: 8, mainAxisSpacing: 8),
         itemCount: items.length,
         itemBuilder: (c, i) {
           final m = items[i];

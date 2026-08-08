@@ -15,7 +15,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _ctrl = TextEditingController(text: ref.read(storeProvider).tmdbKey);
+    _ctrl = TextEditingController(text: ref.read(tmdbKeyProvider));
   }
 
   @override
