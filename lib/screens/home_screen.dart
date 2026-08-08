@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../state/providers.dart';
 import '../widgets/movie_row.dart';
-import '../widgets/hero_banner.dart';
+import '../widgets/hero_carousel.dart';
 import '../widgets/async_view.dart';
 import '../theme/app_theme.dart';
 import '../data/local_store.dart';
@@ -105,13 +105,11 @@ class HomeScreen extends ConsumerWidget {
       onRetry: () => ref.invalidate(latestProvider),
       builder: (page) {
         final movies = page.items;
-        final hero = movies.isNotEmpty ? movies.first : null;
         return ListView(children: [
-          if (hero != null)
-            HeroBanner(
-              movie: hero,
-              onPlay: () => _open(context, hero.slug, hero.name),
-              onInfo: () => _open(context, hero.slug, hero.name),
+          if (movies.isNotEmpty)
+            HeroCarousel(
+              movies: movies.take(6).toList(),
+              onOpen: (m) => _open(context, m.slug, m.name),
             ),
           _continueRow(ref, context),
           _recommendedRow(ref, context),

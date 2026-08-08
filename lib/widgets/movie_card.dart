@@ -68,6 +68,19 @@ class _MovieCardState extends State<MovieCard> {
                               textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 10)),
                         ),
                       ),
+                    // Hover: phủ tối + nút xem
+                    if (_hover)
+                      Positioned.fill(
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          alignment: Alignment.center,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle),
+                            child: const Icon(Icons.play_arrow, color: Colors.white, size: 28),
+                          ),
+                        ),
+                      ),
                   ]),
                 ),
                 Container(
