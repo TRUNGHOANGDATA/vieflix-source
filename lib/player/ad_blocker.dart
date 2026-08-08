@@ -62,31 +62,73 @@ const String kAntiAdUserScript = r'''
     ].join('\n');
     (document.head || document.documentElement).appendChild(css);
 
-    // 4) CHẶN QUẢNG CÁO VAST (an toàn, không đụng khởi tạo jwplayer):
-    //    tự bấm "Bỏ qua quảng cáo" + gọi API skipAd ngay khi có thể.
-    setInterval(function () {
+    // 4) CHẶN QUẢNG CÁO (video pre-roll tự chèn của nguồn):
+    //    a) tự bấm nút "Bỏ qua" tìm theo CHỮ (không phụ thuộc class), bắn đủ sự kiện chuột.
+    //    b) khi đang có quảng cáo, TUA NHANH video quảng cáo (ngắn) tới cuối để vào phim.
+    function fireClick(el) {
       try {
-        // Bấm nút skip của jwplayer khi hiện
-        var sels = ['.jw-skip', '.jw-skippable', '[class*="jw-skip"]'];
-        for (var s = 0; s < sels.length; s++) {
-          var els = document.querySelectorAll(sels[s]);
-          for (var j = 0; j < els.length; j++) {
-            if (els[j] && els[j].offsetParent !== null) { try { els[j].click(); } catch (e) {} }
-          }
+        var r = el.getBoundingClientRect();
+        var x = r.left + r.width / 2, y = r.top + r.height / 2;
+        ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function (t) {
+          var ev;
+          try { ev = new MouseEvent(t, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+          catch (e) { ev = document.createEvent('MouseEvents'); ev.initEvent(t, true, true); }
+          el.dispatchEvent(ev);
+        });
+      } catch (e) {}
+    }
+
+    function norm(s) { return (s || '').toString().toLowerCase(); }
+
+    setInterval(function () {
+      // Phát hiện đang có quảng cáo (chữ "quảng cáo"/"bỏ qua" xuất hiện)
+      var pageText = '';
+      try { pageText = norm(document.body ? document.body.innerText : ''); } catch (e) {}
+      var adOn = /quảng cáo|bỏ qua/.test(pageText);
+
+      // a) Bấm mọi phần tử skip: theo chữ "bỏ qua" hoặc class/id chứa "skip"
+      try {
+        var cands = document.querySelectorAll('button, a, div, span, [class*="skip"], [id*="skip"]');
+        for (var i = 0; i < cands.length; i++) {
+          var el = cands[i];
+          if (!el || el.offsetParent === null) continue;
+          var t = norm(el.textContent).trim();
+          var cls = norm(el.className) + ' ' + norm(el.id);
+          var byText = t.length > 0 && t.length < 40 && t.indexOf('bỏ qua') >= 0 && el.children.length <= 3;
+          var byCls = cls.indexOf('skip') >= 0;
+          if (byText || byCls) fireClick(el);
         }
       } catch (e) {}
+
+      // b) Tua nhanh video quảng cáo (ngắn) tới cuối khi đang có quảng cáo
+      if (adOn) {
+        try {
+          var vids = document.querySelectorAll('video');
+          for (var k = 0; k < vids.length; k++) {
+            var v = vids[k];
+            var d = v.duration;
+            // Quảng cáo thường ngắn (<6 phút); phim/tập dài hơn nhiều -> chỉ tua clip ngắn
+            if (isFinite(d) && d > 0 && d < 360) {
+              try { v.muted = true; if (v.currentTime < d - 0.3) v.currentTime = d; } catch (e) {}
+            }
+          }
+        } catch (e) {}
+      }
+
+      // c) Gọi API skipAd của jwplayer nếu có (trường hợp là VAST chuẩn)
       try {
-        // Gọi API skipAd của jwplayer (bỏ qua ngay sau skipoffset)
         if (typeof window.jwplayer === 'function') {
           var p = window.jwplayer();
           if (p && typeof p.skipAd === 'function') p.skipAd();
         }
       } catch (e) {}
+
+      // d) Bỏ target=_blank tránh mở tab QC
       try {
         var links = document.querySelectorAll('a[target="_blank"]');
-        for (var i = 0; i < links.length; i++) { links[i].removeAttribute('target'); }
+        for (var m = 0; m < links.length; m++) { links[m].removeAttribute('target'); }
       } catch (e) {}
-    }, 500);
+    }, 350);
   } catch (e) {}
 })();
 ''';
