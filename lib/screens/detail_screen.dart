@@ -126,7 +126,8 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     ref.read(storeProvider).saveProgress(slug: d.slug, server: s.serverName, episodeSlug: ep.slug, episodeName: ep.name);
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => PlayerScreen(
-        title: '${d.name} - Tập ${ep.name}',
+        movieName: d.name,
+        posterUrl: d.posterUrl.isNotEmpty ? d.posterUrl : d.thumbUrl,
         embedUrl: ep.embed,
         episodes: s.items,
         startIndex: s.items.indexOf(ep),

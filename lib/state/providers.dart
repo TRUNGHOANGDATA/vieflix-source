@@ -20,6 +20,9 @@ final typeRowProvider = FutureProvider.family<List<Movie>, String>(
 final genreRowProvider = FutureProvider.family<List<Movie>, String>(
     (ref, slug) async => (await ref.read(apiProvider).byGenre(slug)).items);
 
+final countryRowProvider = FutureProvider.family<List<Movie>, String>(
+    (ref, slug) async => (await ref.read(apiProvider).byCountry(slug)).items);
+
 // --- Detail ---
 final detailProvider = FutureProvider.family<MovieDetail, String>(
     (ref, slug) => ref.read(apiProvider).detail(slug));

@@ -31,12 +31,21 @@ class HomeScreen extends ConsumerWidget {
             ),
           _continueRow(ref, context),
           MovieRow(title: 'Mới cập nhật', movies: movies, onTap: (m) => _open(context, m.slug, m.name)),
-          _typeRow(ref, context, 'Phim Bộ', 'phim-bo'),
-          _typeRow(ref, context, 'Phim Lẻ', 'phim-le'),
-          _typeRow(ref, context, 'Hoạt Hình', 'hoat-hinh'),
-          _typeRow(ref, context, 'TV Shows', 'tv-shows'),
+          // Ưu tiên theo quốc gia
+          _countryRow(ref, context, 'Phim Trung Quốc', 'trung-quoc'),
+          _countryRow(ref, context, 'Phim Hàn Quốc', 'han-quoc'),
+          _countryRow(ref, context, 'Phim Việt Nam', 'viet-nam'),
+          _countryRow(ref, context, 'Phim Nhật Bản', 'nhat-ban'),
+          _countryRow(ref, context, 'Phim Âu Mỹ', 'au-my'),
+          // Rồi tới thể loại
           _genreRow(ref, context, 'Hành Động', 'hanh-dong'),
           _genreRow(ref, context, 'Tình Cảm', 'tinh-cam'),
+          _genreRow(ref, context, 'Kinh Dị', 'kinh-di'),
+          _genreRow(ref, context, 'Hài', 'hai'),
+          _genreRow(ref, context, 'Cổ Trang', 'co-trang'),
+          // Rồi tới loại phim
+          _typeRow(ref, context, 'Hoạt Hình', 'hoat-hinh'),
+          _typeRow(ref, context, 'TV Shows', 'tv-shows'),
           const SizedBox(height: 40),
         ]);
       },
@@ -79,6 +88,14 @@ class HomeScreen extends ConsumerWidget {
 
   Widget _genreRow(WidgetRef ref, BuildContext c, String title, String slug) {
     final v = ref.watch(genreRowProvider(slug));
+    return v.maybeWhen(
+      data: (list) => MovieRow(title: title, movies: list, onTap: (m) => _open(c, m.slug, m.name)),
+      orElse: () => const SizedBox(height: 8),
+    );
+  }
+
+  Widget _countryRow(WidgetRef ref, BuildContext c, String title, String slug) {
+    final v = ref.watch(countryRowProvider(slug));
     return v.maybeWhen(
       data: (list) => MovieRow(title: title, movies: list, onTap: (m) => _open(c, m.slug, m.name)),
       orElse: () => const SizedBox(height: 8),
