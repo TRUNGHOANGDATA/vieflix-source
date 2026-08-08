@@ -6,8 +6,70 @@ import '../widgets/movie_row.dart';
 import '../widgets/hero_banner.dart';
 import '../widgets/async_view.dart';
 import '../theme/app_theme.dart';
+import '../data/local_store.dart';
 import 'detail_screen.dart';
 import 'category_list_screen.dart';
+
+/// Thẻ "Xem tiếp": tự lấy ảnh nền + tên + tổng số tập từ API theo slug.
+class ContinueCard extends ConsumerWidget {
+  final WatchProgress progress;
+  final void Function(String slug, String name) onOpen;
+  const ContinueCard({super.key, required this.progress, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final d = ref.watch(detailProvider(progress.slug));
+    return d.maybeWhen(
+      data: (det) {
+        final img = det.thumbUrl.isNotEmpty ? det.thumbUrl : det.posterUrl;
+        final avail = det.servers.isNotEmpty ? det.servers.first.items.length : 0;
+        final total = det.base.totalEpisodes > avail ? det.base.totalEpisodes : (avail > 0 ? avail : det.base.totalEpisodes);
+        final sub = total > 1 ? 'Xem tiếp Tập ${progress.episodeName} / $total' : 'Xem tiếp';
+        return _card(img, det.name, sub, det.slug, det.name);
+      },
+      orElse: () {
+        final name = progress.name.isNotEmpty ? progress.name : progress.slug;
+        return _card(progress.poster, name, 'Xem tiếp Tập ${progress.episodeName}', progress.slug, name);
+      },
+    );
+  }
+
+  Widget _card(String img, String name, String sub, String slug, String openName) {
+    return GestureDetector(
+      onTap: () => onOpen(slug, openName),
+      child: Container(
+        width: 268,
+        margin: const EdgeInsets.only(right: 12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Stack(fit: StackFit.expand, children: [
+            if (img.isNotEmpty)
+              CachedNetworkImage(imageUrl: img, fit: BoxFit.cover, errorWidget: (c, _, __) => Container(color: kSurface))
+            else
+              Container(color: kSurface, child: const Icon(Icons.movie, color: Colors.white24, size: 40)),
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                    colors: [Colors.black, Colors.black54, Colors.transparent]),
+              ),
+            ),
+            const Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 44)),
+            Positioned(
+              left: 10, right: 10, bottom: 10,
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 2),
+                Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: kRed, fontSize: 12, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -63,49 +125,15 @@ class HomeScreen extends ConsumerWidget {
         child: Text('Xem tiếp', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
       ),
       SizedBox(
-        height: 104,
+        height: 150,
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           itemCount: cw.length,
-          itemBuilder: (c, i) {
-            final p = cw[i];
-            return GestureDetector(
-              onTap: () => _open(context, p.slug, p.name),
-              child: Container(
-                width: 300,
-                margin: const EdgeInsets.only(right: 10),
-                decoration: BoxDecoration(color: kSurface, borderRadius: BorderRadius.circular(8)),
-                child: Row(children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
-                    child: SizedBox(
-                      width: 130, height: 104,
-                      child: p.poster.isNotEmpty
-                          ? CachedNetworkImage(imageUrl: p.poster, fit: BoxFit.cover,
-                              errorWidget: (c, _, __) => Container(color: Colors.black26, child: const Icon(Icons.movie, color: Colors.white24)))
-                          : Container(color: Colors.black26, child: const Icon(Icons.movie, color: Colors.white24)),
-                    ),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                        const SizedBox(height: 6),
-                        Row(children: [
-                          const Icon(Icons.play_circle_fill, color: kRed, size: 18),
-                          const SizedBox(width: 4),
-                          Text('Xem tiếp Tập ${p.episodeName}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                        ]),
-                      ]),
-                    ),
-                  ),
-                ]),
-              ),
-            );
-          },
+          itemBuilder: (c, i) => ContinueCard(
+            progress: cw[i],
+            onOpen: (slug, name) => _open(context, slug, name),
+          ),
         ),
       ),
     ]);

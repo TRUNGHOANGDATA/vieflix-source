@@ -124,17 +124,18 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                 ),
             ]),
             const SizedBox(height: 10),
-            // Trạng thái phát: hiện có bao nhiêu tập + tình trạng cập nhật
-            Row(children: [
-              const Icon(Icons.playlist_play, color: Colors.white54, size: 20),
-              const SizedBox(width: 6),
-              Text(
-                'Hiện có ${eps.length} tập'
-                '${d.base.currentEpisode.isNotEmpty ? ' · ${d.base.currentEpisode}' : ''}'
-                '${(d.base.totalEpisodes > eps.length) ? ' (dự kiến ${d.base.totalEpisodes} tập — đang cập nhật)' : ''}',
-                style: const TextStyle(color: Colors.white60, fontSize: 13),
-              ),
-            ]),
+            // Trạng thái phát: X / tổng số tập (vd 6 / 18)
+            Builder(builder: (_) {
+              final total = d.base.totalEpisodes > eps.length ? d.base.totalEpisodes : eps.length;
+              final updating = d.base.totalEpisodes > eps.length;
+              return Row(children: [
+                const Icon(Icons.playlist_play, color: Colors.white54, size: 20),
+                const SizedBox(width: 6),
+                Text('${eps.length} / $total tập', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                const SizedBox(width: 8),
+                Text(updating ? '· Đang cập nhật' : '· Đã hoàn tất', style: TextStyle(color: updating ? Colors.orangeAccent : Colors.greenAccent, fontSize: 12)),
+              ]);
+            }),
             const SizedBox(height: 12),
             // Lưới tập đều nhau, đã sắp xếp theo số thứ tự
             Wrap(spacing: 8, runSpacing: 8, children: [
