@@ -52,48 +52,7 @@ const String kAntiAdUserScript = r'''
       value: { launch: function(){}, addListener: function(){} },
       configurable: true
     }); } catch (e) {}
-    try { location.reload = function () {}; } catch (e) {}
-
-    // 3) CHẶN QUẢNG CÁO VAST: bọc window.jwplayer để xoá 'advertising' khi setup
-    var _jw;
-    function wrapFactory(orig) {
-      if (!orig || orig.__adWrapped) return orig;
-      var wrapped = function () {
-        var inst = orig.apply(this, arguments);
-        try {
-          if (inst && typeof inst.setup === 'function' && !inst.__adSetup) {
-            inst.__adSetup = 1;
-            var origSetup = inst.setup.bind(inst);
-            inst.setup = function (cfg) {
-              try {
-                if (cfg && typeof cfg === 'object') {
-                  delete cfg.advertising;
-                  delete cfg.ads;
-                }
-              } catch (e) {}
-              return origSetup(cfg);
-            };
-          }
-        } catch (e) {}
-        return inst;
-      };
-      try {
-        Object.getOwnPropertyNames(orig).forEach(function (k) {
-          try { wrapped[k] = orig[k]; } catch (e) {}
-        });
-      } catch (e) {}
-      wrapped.__adWrapped = 1;
-      return wrapped;
-    }
-    try {
-      Object.defineProperty(window, 'jwplayer', {
-        configurable: true,
-        get: function () { return _jw; },
-        set: function (v) { _jw = wrapFactory(v); }
-      });
-    } catch (e) {}
-
-    // 4) Ẩn overlay/banner QC + cho video full khung
+    // 3) Ẩn overlay/banner QC + cho video full khung
     var css = document.createElement('style');
     css.innerHTML = [
       '#_wau, ._wau, .ad, .ads, .adsbox, [id^="ad_"], [class*="popup"],',
@@ -103,20 +62,31 @@ const String kAntiAdUserScript = r'''
     ].join('\n');
     (document.head || document.documentElement).appendChild(css);
 
-    // 5) Dự phòng: tự bấm "Bỏ qua quảng cáo" + gọi API skipAd + xoá target=_blank
+    // 4) CHẶN QUẢNG CÁO VAST (an toàn, không đụng khởi tạo jwplayer):
+    //    tự bấm "Bỏ qua quảng cáo" + gọi API skipAd ngay khi có thể.
     setInterval(function () {
       try {
-        var sk = document.querySelector('.jw-skip:not(.jw-hidden)');
-        if (sk && sk.offsetParent !== null) sk.click();
+        // Bấm nút skip của jwplayer khi hiện
+        var sels = ['.jw-skip', '.jw-skippable', '[class*="jw-skip"]'];
+        for (var s = 0; s < sels.length; s++) {
+          var els = document.querySelectorAll(sels[s]);
+          for (var j = 0; j < els.length; j++) {
+            if (els[j] && els[j].offsetParent !== null) { try { els[j].click(); } catch (e) {} }
+          }
+        }
       } catch (e) {}
       try {
-        if (typeof _jw === 'function') { var p = _jw(); if (p && p.skipAd) p.skipAd(); }
+        // Gọi API skipAd của jwplayer (bỏ qua ngay sau skipoffset)
+        if (typeof window.jwplayer === 'function') {
+          var p = window.jwplayer();
+          if (p && typeof p.skipAd === 'function') p.skipAd();
+        }
       } catch (e) {}
       try {
         var links = document.querySelectorAll('a[target="_blank"]');
         for (var i = 0; i < links.length; i++) { links[i].removeAttribute('target'); }
       } catch (e) {}
-    }, 600);
+    }, 500);
   } catch (e) {}
 })();
 ''';

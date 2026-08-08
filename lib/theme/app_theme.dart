@@ -13,4 +13,12 @@ final appTheme = ThemeData(
   ),
   fontFamily: 'Segoe UI',
   useMaterial3: true,
+  elevatedButtonTheme: ElevatedButtonThemeData(
+    style: ElevatedButton.styleFrom(
+      backgroundColor: kRed,
+      foregroundColor: Colors.white,
+      disabledBackgroundColor: kSurface,
+      disabledForegroundColor: Colors.white38,
+    ),
+  ),
 );
