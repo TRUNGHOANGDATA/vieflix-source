@@ -17,7 +17,41 @@ class DetailScreen extends ConsumerStatefulWidget {
 }
 
 class _DetailScreenState extends ConsumerState<DetailScreen> {
-  int _server = 0;
+  int? _userServer; // null = chưa chọn -> dùng mặc định (ưu tiên Thuyết minh)
+
+  int _defaultServer(List<ServerGroup> servers) {
+    for (int i = 0; i < servers.length; i++) {
+      final n = servers[i].serverName.toLowerCase();
+      if (n.contains('thuyết minh') || n.contains('thuyet minh') ||
+          n.contains('lồng tiếng') || n.contains('long tieng')) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  int _effServer(List<ServerGroup> servers) {
+    final u = _userServer;
+    if (u != null && u >= 0 && u < servers.length) return u;
+    return _defaultServer(servers);
+  }
+
+  // Sắp xếp tập theo số thứ tự (Tập 1,2,...,10,11 thay vì 1,10,11,2)
+  List<Episode> _sorted(List<Episode> items) {
+    int? num(String s) {
+      final m = RegExp(r'\d+').firstMatch(s);
+      return m == null ? null : int.tryParse(m.group(0)!);
+    }
+    final copy = [...items];
+    copy.sort((a, b) {
+      final na = num(a.name), nb = num(b.name);
+      if (na != null && nb != null) return na.compareTo(nb);
+      if (na != null) return -1;
+      if (nb != null) return 1;
+      return a.name.compareTo(b.name);
+    });
+    return copy;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +71,8 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     final fav = store.isFavorite(d.slug);
     final servers = d.servers;
     final hasServer = servers.isNotEmpty;
-    if (_server >= servers.length) _server = 0;
+    final srv = hasServer ? _effServer(servers) : 0;
+    final eps = hasServer ? _sorted(servers[srv].items) : <Episode>[];
     return ListView(children: [
       SizedBox(
         height: 320,
@@ -61,7 +96,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
           Row(children: [
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(backgroundColor: kRed),
-              onPressed: hasServer ? () => _play(d, servers[_server], servers[_server].items.first) : null,
+              onPressed: hasServer ? () => _play(d, servers[srv], eps, eps.first) : null,
               icon: const Icon(Icons.play_arrow), label: const Text('Xem ngay'),
             ),
             const SizedBox(width: 12),
@@ -78,22 +113,41 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
           Text(d.description, style: const TextStyle(color: Colors.white70, height: 1.4)),
           const SizedBox(height: 20),
           if (hasServer) ...[
+            // Chọn server (kèm số tập). Mặc định ưu tiên Thuyết minh.
             Wrap(spacing: 8, children: [
               for (int i = 0; i < servers.length; i++)
                 ChoiceChip(
-                  label: Text(servers[i].serverName),
-                  selected: _server == i,
+                  label: Text('${servers[i].serverName} · ${servers[i].items.length} tập'),
+                  selected: srv == i,
                   selectedColor: kRed,
-                  onSelected: (_) => setState(() => _server = i),
+                  onSelected: (_) => setState(() => _userServer = i),
                 ),
             ]),
+            const SizedBox(height: 10),
+            // Trạng thái phát: hiện có bao nhiêu tập + tình trạng cập nhật
+            Row(children: [
+              const Icon(Icons.playlist_play, color: Colors.white54, size: 20),
+              const SizedBox(width: 6),
+              Text(
+                'Hiện có ${eps.length} tập'
+                '${d.base.currentEpisode.isNotEmpty ? ' · ${d.base.currentEpisode}' : ''}'
+                '${(d.base.totalEpisodes > eps.length) ? ' (dự kiến ${d.base.totalEpisodes} tập — đang cập nhật)' : ''}',
+                style: const TextStyle(color: Colors.white60, fontSize: 13),
+              ),
+            ]),
             const SizedBox(height: 12),
+            // Lưới tập đều nhau, đã sắp xếp theo số thứ tự
             Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final ep in servers[_server].items)
-                ActionChip(
-                  backgroundColor: kSurface,
-                  label: Text('Tập ${ep.name}', style: const TextStyle(color: Colors.white)),
-                  onPressed: () => _play(d, servers[_server], ep),
+              for (final ep in eps)
+                SizedBox(
+                  width: 68,
+                  child: ActionChip(
+                    backgroundColor: kSurface,
+                    padding: EdgeInsets.zero,
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    label: Center(child: Text('Tập ${ep.name}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12))),
+                    onPressed: () => _play(d, servers[srv], eps, ep),
+                  ),
                 ),
             ]),
           ] else
@@ -122,15 +176,15 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     );
   }
 
-  void _play(MovieDetail d, ServerGroup s, Episode ep) {
+  void _play(MovieDetail d, ServerGroup s, List<Episode> eps, Episode ep) {
     ref.read(storeProvider).saveProgress(slug: d.slug, server: s.serverName, episodeSlug: ep.slug, episodeName: ep.name);
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => PlayerScreen(
         movieName: d.name,
         posterUrl: d.posterUrl.isNotEmpty ? d.posterUrl : d.thumbUrl,
         embedUrl: ep.embed,
-        episodes: s.items,
-        startIndex: s.items.indexOf(ep),
+        episodes: eps,
+        startIndex: eps.indexOf(ep),
         onEpisodeChange: (e) => ref.read(storeProvider).saveProgress(slug: d.slug, server: s.serverName, episodeSlug: e.slug, episodeName: e.name),
       ),
     ));

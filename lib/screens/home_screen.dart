@@ -6,6 +6,7 @@ import '../widgets/hero_banner.dart';
 import '../widgets/async_view.dart';
 import '../theme/app_theme.dart';
 import 'detail_screen.dart';
+import 'category_list_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -78,10 +79,16 @@ class HomeScreen extends ConsumerWidget {
     ]);
   }
 
+  void _seeMore(BuildContext c, String title, BrowseQuery q) => Navigator.of(c).push(
+      MaterialPageRoute(builder: (_) => CategoryListScreen(title: title, query: q)));
+
   Widget _typeRow(WidgetRef ref, BuildContext c, String title, String type) {
     final v = ref.watch(typeRowProvider(type));
     return v.maybeWhen(
-      data: (list) => MovieRow(title: title, movies: list, onTap: (m) => _open(c, m.slug, m.name)),
+      data: (list) => MovieRow(
+        title: title, movies: list, onTap: (m) => _open(c, m.slug, m.name),
+        onSeeMore: () => _seeMore(c, title, BrowseQuery('type', type)),
+      ),
       orElse: () => const SizedBox(height: 8),
     );
   }
@@ -89,7 +96,10 @@ class HomeScreen extends ConsumerWidget {
   Widget _genreRow(WidgetRef ref, BuildContext c, String title, String slug) {
     final v = ref.watch(genreRowProvider(slug));
     return v.maybeWhen(
-      data: (list) => MovieRow(title: title, movies: list, onTap: (m) => _open(c, m.slug, m.name)),
+      data: (list) => MovieRow(
+        title: title, movies: list, onTap: (m) => _open(c, m.slug, m.name),
+        onSeeMore: () => _seeMore(c, title, BrowseQuery('genre', slug)),
+      ),
       orElse: () => const SizedBox(height: 8),
     );
   }
@@ -97,7 +107,10 @@ class HomeScreen extends ConsumerWidget {
   Widget _countryRow(WidgetRef ref, BuildContext c, String title, String slug) {
     final v = ref.watch(countryRowProvider(slug));
     return v.maybeWhen(
-      data: (list) => MovieRow(title: title, movies: list, onTap: (m) => _open(c, m.slug, m.name)),
+      data: (list) => MovieRow(
+        title: title, movies: list, onTap: (m) => _open(c, m.slug, m.name),
+        onSeeMore: () => _seeMore(c, title, BrowseQuery('country', slug)),
+      ),
       orElse: () => const SizedBox(height: 8),
     );
   }
