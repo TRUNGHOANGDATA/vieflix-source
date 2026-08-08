@@ -29,6 +29,7 @@ class WatchProgress {
 class LocalStore {
   static const _kFav = 'favorites_v1';
   static const _kProg = 'progress_v1';
+  static const _maxProgress = 30; // Giữ 30 phim xem gần nhất (nhẹ cho TV)
   late SharedPreferences _p;
   final List<Movie> _favorites = [];
   final Map<String, WatchProgress> _progress = {};
@@ -74,6 +75,24 @@ class LocalStore {
       server: server, episodeSlug: episodeSlug,
       episodeName: episodeName, updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
+    _capProgress();
+    await _saveProgress();
+  }
+
+  Future<void> removeProgress(String slug) async {
+    _progress.remove(slug);
+    await _saveProgress();
+  }
+
+  void _capProgress() {
+    if (_progress.length <= _maxProgress) return;
+    final sorted = _progress.values.toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final keep = sorted.take(_maxProgress).map((e) => e.slug).toSet();
+    _progress.removeWhere((k, v) => !keep.contains(k));
+  }
+
+  Future<void> _saveProgress() async {
     await _p.setString(_kProg,
         jsonEncode(_progress.map((k, v) => MapEntry(k, v.toJson()))));
   }

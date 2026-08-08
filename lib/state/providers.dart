@@ -7,6 +7,9 @@ import '../models/paginated.dart';
 
 final apiProvider = Provider<NguoncApi>((ref) => NguoncApi());
 
+/// Tăng giá trị này để buộc Trang chủ vẽ lại (sau khi xoá mục Xem tiếp...).
+final homeRefreshProvider = StateProvider<int>((ref) => 0);
+
 /// storeProvider được override ở main sau khi init().
 final storeProvider = Provider<LocalStore>((ref) => throw UnimplementedError());
 

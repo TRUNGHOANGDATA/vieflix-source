@@ -10,7 +10,7 @@ import '../data/local_store.dart';
 import 'detail_screen.dart';
 import 'category_list_screen.dart';
 
-/// Thẻ "Xem tiếp": tự lấy ảnh nền + tên + tổng số tập từ API theo slug.
+/// Thẻ "Xem tiếp" (ảnh dọc): tự lấy poster + tên + tổng số tập từ API theo slug.
 class ContinueCard extends ConsumerWidget {
   final WatchProgress progress;
   final void Function(String slug, String name) onOpen;
@@ -21,25 +21,30 @@ class ContinueCard extends ConsumerWidget {
     final d = ref.watch(detailProvider(progress.slug));
     return d.maybeWhen(
       data: (det) {
-        final img = det.thumbUrl.isNotEmpty ? det.thumbUrl : det.posterUrl;
+        final img = det.posterUrl.isNotEmpty ? det.posterUrl : det.thumbUrl;
         final avail = det.servers.isNotEmpty ? det.servers.first.items.length : 0;
         final total = det.base.totalEpisodes > avail ? det.base.totalEpisodes : (avail > 0 ? avail : det.base.totalEpisodes);
-        final sub = total > 1 ? 'Xem tiếp Tập ${progress.episodeName} / $total' : 'Xem tiếp';
-        return _card(img, det.name, sub, det.slug, det.name);
+        final sub = total > 1 ? 'Tập ${progress.episodeName} / $total' : 'Xem tiếp';
+        return _card(context, ref, img, det.name, sub, det.slug, det.name);
       },
       orElse: () {
         final name = progress.name.isNotEmpty ? progress.name : progress.slug;
-        return _card(progress.poster, name, 'Xem tiếp Tập ${progress.episodeName}', progress.slug, name);
+        return _card(context, ref, progress.poster, name, 'Tập ${progress.episodeName}', progress.slug, name);
       },
     );
   }
 
-  Widget _card(String img, String name, String sub, String slug, String openName) {
+  Future<void> _remove(WidgetRef ref) async {
+    await ref.read(storeProvider).removeProgress(progress.slug);
+    ref.read(homeRefreshProvider.notifier).state++; // buộc trang chủ vẽ lại
+  }
+
+  Widget _card(BuildContext context, WidgetRef ref, String img, String name, String sub, String slug, String openName) {
     return GestureDetector(
       onTap: () => onOpen(slug, openName),
       child: Container(
-        width: 268,
-        margin: const EdgeInsets.only(right: 12),
+        width: 150,
+        margin: const EdgeInsets.symmetric(horizontal: 6),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: Stack(fit: StackFit.expand, children: [
@@ -47,21 +52,35 @@ class ContinueCard extends ConsumerWidget {
               CachedNetworkImage(imageUrl: img, fit: BoxFit.cover, errorWidget: (c, _, __) => Container(color: kSurface))
             else
               Container(color: kSurface, child: const Icon(Icons.movie, color: Colors.white24, size: 40)),
+            // Lớp tối dưới đáy để chữ trắng luôn đọc rõ
             Container(
               decoration: const BoxDecoration(
-                gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter,
-                    colors: [Colors.black, Colors.black54, Colors.transparent]),
+                gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.center,
+                    colors: [Colors.black, Colors.transparent]),
               ),
             ),
-            const Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 44)),
+            const Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 42)),
+            // Nút xóa khỏi Xem tiếp
             Positioned(
-              left: 10, right: 10, bottom: 10,
+              top: 4, right: 4,
+              child: GestureDetector(
+                onTap: () => _remove(ref),
+                child: Container(
+                  decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                  padding: const EdgeInsets.all(4),
+                  child: const Icon(Icons.close, color: Colors.white, size: 16),
+                ),
+              ),
+            ),
+            // Tên + tập (chữ trắng hết)
+            Positioned(
+              left: 8, right: 8, bottom: 8,
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                 const SizedBox(height: 2),
                 Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: kRed, fontSize: 12, fontWeight: FontWeight.w600)),
+                    style: const TextStyle(color: Colors.white, fontSize: 12)),
               ]),
             ),
           ]),
@@ -79,6 +98,7 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(homeRefreshProvider); // vẽ lại khi xoá mục Xem tiếp
     final latest = ref.watch(latestProvider);
     return AsyncView(
       value: latest,
@@ -125,10 +145,10 @@ class HomeScreen extends ConsumerWidget {
         child: Text('Xem tiếp', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
       ),
       SizedBox(
-        height: 150,
+        height: 250,
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           itemCount: cw.length,
           itemBuilder: (c, i) => ContinueCard(
             progress: cw[i],
