@@ -39,7 +39,9 @@ List<ContentBlocker> adContentBlockers() {
       .toList();
 }
 
-/// JS tiêm sớm: vô hiệu popup/popunder, chặn reload anti-devtools, ẩn overlay QC.
+/// JS tiêm sớm (document start): chặn popup, ẩn overlay, VÀ chặn quảng cáo
+/// VAST pre-roll bằng cách xoá cấu hình `advertising` khỏi jwplayer.setup(),
+/// kèm tự bấm "Bỏ qua quảng cáo" làm phương án dự phòng.
 const String kAntiAdUserScript = r'''
 (function () {
   try {
@@ -50,8 +52,48 @@ const String kAntiAdUserScript = r'''
       value: { launch: function(){}, addListener: function(){} },
       configurable: true
     }); } catch (e) {}
-    location.reload = function () {}; // chặn vòng lặp reload
-    // 3) Ẩn overlay/banner QC + cho video full khung
+    try { location.reload = function () {}; } catch (e) {}
+
+    // 3) CHẶN QUẢNG CÁO VAST: bọc window.jwplayer để xoá 'advertising' khi setup
+    var _jw;
+    function wrapFactory(orig) {
+      if (!orig || orig.__adWrapped) return orig;
+      var wrapped = function () {
+        var inst = orig.apply(this, arguments);
+        try {
+          if (inst && typeof inst.setup === 'function' && !inst.__adSetup) {
+            inst.__adSetup = 1;
+            var origSetup = inst.setup.bind(inst);
+            inst.setup = function (cfg) {
+              try {
+                if (cfg && typeof cfg === 'object') {
+                  delete cfg.advertising;
+                  delete cfg.ads;
+                }
+              } catch (e) {}
+              return origSetup(cfg);
+            };
+          }
+        } catch (e) {}
+        return inst;
+      };
+      try {
+        Object.getOwnPropertyNames(orig).forEach(function (k) {
+          try { wrapped[k] = orig[k]; } catch (e) {}
+        });
+      } catch (e) {}
+      wrapped.__adWrapped = 1;
+      return wrapped;
+    }
+    try {
+      Object.defineProperty(window, 'jwplayer', {
+        configurable: true,
+        get: function () { return _jw; },
+        set: function (v) { _jw = wrapFactory(v); }
+      });
+    } catch (e) {}
+
+    // 4) Ẩn overlay/banner QC + cho video full khung
     var css = document.createElement('style');
     css.innerHTML = [
       '#_wau, ._wau, .ad, .ads, .adsbox, [id^="ad_"], [class*="popup"],',
@@ -60,11 +102,21 @@ const String kAntiAdUserScript = r'''
       'video, .jwplayer, #player { width:100vw !important; height:100vh !important; }'
     ].join('\n');
     (document.head || document.documentElement).appendChild(css);
-    // 4) Xóa target=_blank (tránh mở tab QC) định kỳ
+
+    // 5) Dự phòng: tự bấm "Bỏ qua quảng cáo" + gọi API skipAd + xoá target=_blank
     setInterval(function () {
-      var links = document.querySelectorAll('a[target="_blank"]');
-      for (var i = 0; i < links.length; i++) { links[i].removeAttribute('target'); }
-    }, 1000);
+      try {
+        var sk = document.querySelector('.jw-skip:not(.jw-hidden)');
+        if (sk && sk.offsetParent !== null) sk.click();
+      } catch (e) {}
+      try {
+        if (typeof _jw === 'function') { var p = _jw(); if (p && p.skipAd) p.skipAd(); }
+      } catch (e) {}
+      try {
+        var links = document.querySelectorAll('a[target="_blank"]');
+        for (var i = 0; i < links.length; i++) { links[i].removeAttribute('target'); }
+      } catch (e) {}
+    }, 600);
   } catch (e) {}
 })();
 ''';
