@@ -177,9 +177,17 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     );
   }
 
+  void _saveAndRefresh(MovieDetail d, ServerGroup s, Episode ep, String poster) {
+    ref.read(storeProvider).saveProgress(
+        slug: d.slug, name: d.name, poster: poster,
+        server: s.serverName, episodeSlug: ep.slug, episodeName: ep.name);
+    // Báo trang chủ cập nhật lại hàng "Xem tiếp" ngay
+    ref.read(homeRefreshProvider.notifier).state++;
+  }
+
   void _play(MovieDetail d, ServerGroup s, List<Episode> eps, Episode ep) {
     final poster = d.thumbUrl.isNotEmpty ? d.thumbUrl : d.posterUrl;
-    ref.read(storeProvider).saveProgress(slug: d.slug, name: d.name, poster: poster, server: s.serverName, episodeSlug: ep.slug, episodeName: ep.name);
+    _saveAndRefresh(d, s, ep, poster);
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => PlayerScreen(
         movieName: d.name,
@@ -187,7 +195,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         embedUrl: ep.embed,
         episodes: eps,
         startIndex: eps.indexOf(ep),
-        onEpisodeChange: (e) => ref.read(storeProvider).saveProgress(slug: d.slug, name: d.name, poster: poster, server: s.serverName, episodeSlug: e.slug, episodeName: e.name),
+        onEpisodeChange: (e) => _saveAndRefresh(d, s, e, poster),
       ),
     ));
   }
