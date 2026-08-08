@@ -4,6 +4,7 @@ import '../constants/catalog.dart';
 import '../state/providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/movie_card.dart';
+import '../widgets/filter_bar.dart';
 import 'detail_screen.dart';
 
 class BrowseScreen extends ConsumerStatefulWidget {
@@ -32,7 +33,14 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
     super.dispose();
   }
 
-  void _pick(BrowseQuery q) => setState(() => _q = q);
+  String _label(BrowseQuery q) {
+    switch (q.kind) {
+      case 'type': return kTypes.firstWhere((e) => e.slug == q.value, orElse: () => CatalogEntry(q.value, q.value)).label;
+      case 'genre': return kGenres.firstWhere((e) => e.slug == q.value, orElse: () => CatalogEntry(q.value, q.value)).label;
+      case 'country': return kCountries.firstWhere((e) => e.slug == q.value, orElse: () => CatalogEntry(q.value, q.value)).label;
+      default: return 'Năm ${q.value}';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +53,15 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
       }
     });
     return Column(children: [
-      _filterBar(),
+      FilterBar(current: _q, onChanged: (q) => setState(() => _q = q)),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        child: Row(children: [
+          Text(_label(_q), style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 8),
+          Text('(${st.items.length} phim)', style: const TextStyle(color: Colors.white38, fontSize: 13)),
+        ]),
+      ),
       Expanded(
         child: GridView.builder(
           controller: _scroll,
@@ -61,37 +77,5 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
       ),
       if (st.loading) const Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator(color: kRed)),
     ]);
-  }
-
-  Widget _filterBar() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.all(8),
-      child: Row(children: [
-        _group('Loại', [for (final t in kTypes) BrowseQuery('type', t.slug)], [for (final t in kTypes) t.label]),
-        _group('Thể loại', [for (final g in kGenres) BrowseQuery('genre', g.slug)], [for (final g in kGenres) g.label]),
-        _group('Quốc gia', [for (final c in kCountries) BrowseQuery('country', c.slug)], [for (final c in kCountries) c.label]),
-        _group('Năm', [for (final y in kYears) BrowseQuery('year', y)], kYears),
-      ]),
-    );
-  }
-
-  Widget _group(String label, List<BrowseQuery> qs, List<String> labels) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 16),
-      child: Row(children: [
-        Text('$label: ', style: const TextStyle(color: Colors.white54)),
-        for (int i = 0; i < qs.length; i++)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
-            child: ChoiceChip(
-              label: Text(labels[i]),
-              selected: _q == qs[i],
-              selectedColor: kRed,
-              onSelected: (_) => _pick(qs[i]),
-            ),
-          ),
-      ]),
-    );
   }
 }

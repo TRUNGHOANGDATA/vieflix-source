@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../models/movie.dart';
 import '../models/movie_detail.dart';
 import '../models/episode.dart';
 import '../state/providers.dart';
@@ -101,7 +102,17 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
             ),
             const SizedBox(width: 12),
             OutlinedButton.icon(
-              onPressed: () async { await store.toggleFavorite(d.base); setState(() {}); },
+              onPressed: () async {
+                final favMovie = Movie.fromJson({
+                  'name': d.name, 'slug': d.slug,
+                  'poster_url': d.posterUrl, 'thumb_url': d.thumbUrl,
+                  'quality': d.base.quality, 'current_episode': d.base.currentEpisode,
+                  'total_episodes': d.base.totalEpisodes,
+                  'genres': d.genres.map((g) => g.name).toList(),
+                });
+                await store.toggleFavorite(favMovie);
+                setState(() {});
+              },
               icon: Icon(fav ? Icons.favorite : Icons.favorite_border, color: fav ? kRed : Colors.white),
               label: Text(fav ? 'Đã thích' : 'Yêu thích', style: const TextStyle(color: Colors.white)),
             ),

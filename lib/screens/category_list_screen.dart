@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../state/providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/movie_card.dart';
+import '../widgets/filter_bar.dart';
 import 'detail_screen.dart';
 
-/// Trang danh sách đầy đủ cho một danh mục (thể loại/quốc gia/loại), cuộn vô tận.
+/// Trang danh sách đầy đủ cho một danh mục, có bộ lọc + cuộn vô tận.
 class CategoryListScreen extends ConsumerStatefulWidget {
   final String title;
   final BrowseQuery query;
@@ -16,13 +17,15 @@ class CategoryListScreen extends ConsumerStatefulWidget {
 
 class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
   final _scroll = ScrollController();
+  late BrowseQuery _q;
 
   @override
   void initState() {
     super.initState();
+    _q = widget.query;
     _scroll.addListener(() {
       if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 400) {
-        ref.read(browseProvider(widget.query).notifier).loadMore();
+        ref.read(browseProvider(_q).notifier).loadMore();
       }
     });
   }
@@ -35,20 +38,18 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final st = ref.watch(browseProvider(widget.query));
-    // Tự tải thêm cho tới khi nội dung đầy/vượt màn hình (khắc phục việc
-    // 1 trang chỉ vài phim, không đủ để cuộn nên không kích hoạt loadMore).
+    final st = ref.watch(browseProvider(_q));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final more = st.page < st.totalPage;
-      if (more && !st.loading && _scroll.hasClients &&
+      if (st.page < st.totalPage && !st.loading && _scroll.hasClients &&
           _scroll.position.maxScrollExtent < 400) {
-        ref.read(browseProvider(widget.query).notifier).loadMore();
+        ref.read(browseProvider(_q).notifier).loadMore();
       }
     });
     return Scaffold(
       appBar: AppBar(backgroundColor: Colors.black, title: Text(widget.title)),
       body: Column(children: [
+        FilterBar(current: _q, onChanged: (q) => setState(() => _q = q)),
         Expanded(
           child: GridView.builder(
             controller: _scroll,

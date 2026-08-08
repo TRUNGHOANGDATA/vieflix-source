@@ -50,6 +50,7 @@ class LocalStore {
         'name': m.name, 'slug': m.slug, 'poster_url': m.posterUrl,
         'thumb_url': m.thumbUrl, 'quality': m.quality,
         'current_episode': m.currentEpisode, 'total_episodes': m.totalEpisodes,
+        'genres': m.genres,
       };
   Map<String, dynamic> _favFromStored(dynamic e) => (e as Map).cast<String, dynamic>();
 
