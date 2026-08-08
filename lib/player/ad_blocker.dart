@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 /// Danh sách mảnh chuỗi domain quảng cáo/tracker cần chặn.
@@ -20,13 +21,19 @@ bool isAdUrl(String url) {
   return false;
 }
 
+/// Regex url-filter cho ContentBlocker (thuần, dễ test).
+List<String> adUrlFilters() =>
+    kAdHosts.map((h) => '.*${RegExp.escape(h)}.*').toList();
+
 /// ContentBlocker rules: chặn tải mọi resource khớp host QC.
+/// LƯU Ý: ContentBlocker chỉ hỗ trợ trên Android/iOS/macOS. Trên Windows/Linux
+/// việc tạo `ContentBlockerActionType.BLOCK` sẽ ném lỗi (Null → String), nên
+/// trả về [] ở các nền tảng đó và dựa vào user script + chặn điều hướng.
 List<ContentBlocker> adContentBlockers() {
-  return kAdHosts
-      .map((h) => ContentBlocker(
-            trigger: ContentBlockerTrigger(
-              urlFilter: '.*${RegExp.escape(h)}.*',
-            ),
+  if (Platform.isWindows || Platform.isLinux) return [];
+  return adUrlFilters()
+      .map((f) => ContentBlocker(
+            trigger: ContentBlockerTrigger(urlFilter: f),
             action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
           ))
       .toList();

@@ -15,7 +15,13 @@ void main() {
     expect(isAdUrl('https://phim.nguonc.com/api/film/x'), false);
   });
 
-  test('adContentBlockers trả về rules không rỗng', () {
-    expect(adContentBlockers().isNotEmpty, true);
+  test('adUrlFilters trả về danh sách regex không rỗng', () {
+    expect(adUrlFilters().isNotEmpty, true);
+    expect(adUrlFilters().length, kAdHosts.length);
+    expect(adUrlFilters().any((f) => f.contains('amung')), true);
+  });
+
+  test('adContentBlockers KHÔNG ném lỗi (Windows trả rỗng)', () {
+    expect(() => adContentBlockers(), returnsNormally);
   });
 }
