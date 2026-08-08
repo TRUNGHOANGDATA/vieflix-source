@@ -44,30 +44,60 @@ List<ContentBlocker> adContentBlockers() {
 /// phổ biến (jwplayer/video.js/plyr...) trong ~15s vì player khởi tạo bất đồng bộ.
 const String kAutoPlayScript = r'''
 (function () {
+  function biggest(sel) {
+    var els, best = null, area = 0;
+    try { els = document.querySelectorAll(sel); } catch (e) { return null; }
+    for (var i = 0; i < els.length; i++) {
+      var r = els[i].getBoundingClientRect();
+      var a = r.width * r.height;
+      if (a > area && els[i].offsetParent !== null) { area = a; best = els[i]; }
+    }
+    return best;
+  }
+  function fireClick(el) {
+    if (!el) return;
+    try {
+      var r = el.getBoundingClientRect();
+      var x = r.left + r.width / 2, y = r.top + r.height / 2;
+      ['pointerover','mouseover','pointerdown','mousedown','pointerup','mouseup','click'].forEach(function (t) {
+        var ev;
+        try { ev = new MouseEvent(t, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, button: 0 }); }
+        catch (e) { ev = document.createEvent('MouseEvents'); ev.initEvent(t, true, true); }
+        el.dispatchEvent(ev);
+      });
+    } catch (e) {}
+  }
+  function playing() {
+    try { var v = document.querySelector('video'); return v && !v.paused && !v.ended && v.currentTime > 0; }
+    catch (e) { return false; }
+  }
   function tryPlay() {
+    if (playing()) return;
+    // 1) HTML5 <video> trực tiếp
     try {
       var v = document.querySelector('video');
-      if (v) {
-        var p = v.play();
-        if (p && p.catch) p.catch(function () { try { v.muted = true; v.play(); } catch (e) {} });
-      }
+      if (v) { var p = v.play(); if (p && p.catch) p.catch(function () { try { v.muted = true; v.play(); } catch (e) {} }); }
     } catch (e) {}
+    // 2) JWPlayer API
+    try { if (typeof window.jwplayer === 'function') { var jp = window.jwplayer(); if (jp && jp.play) jp.play(true); } } catch (e) {}
+    // 3) video.js API
+    try { var vjs = document.querySelector('.video-js'); if (vjs && vjs.player && vjs.player.play) vjs.player.play(); } catch (e) {}
+    // 4) Bấm nút play overlay theo class phổ biến
     try {
-      var v2 = document.querySelector('video');
-      if (!v2 || v2.paused) {
-        var sels = ['.jw-icon-display', '.jw-display-icon-container', '.vjs-big-play-button',
-                    '.plyr__control--overlaid', 'button[aria-label*="Play"]', 'button[title*="Play"]',
-                    '[class*="play-button"]', '[class*="btn-play"]', '[class*="vjs-play"]'];
-        for (var i = 0; i < sels.length; i++) {
-          var b = document.querySelector(sels[i]);
-          if (b && b.offsetParent !== null) { try { b.click(); } catch (e) {} break; }
-        }
-      }
+      var sels = ['.jw-icon-display', '.jw-display-icon-container', '.vjs-big-play-button',
+                  '.plyr__control--overlaid', '[class*="play-button"]', '[class*="btn-play"]',
+                  '[aria-label*="Play"]', '[title*="Play"]', '[class*="vjs-play"]'];
+      for (var i = 0; i < sels.length; i++) { var b = document.querySelector(sels[i]); if (b && b.offsetParent !== null) { fireClick(b); break; } }
     } catch (e) {}
+    // 5) Dự phòng: bấm vào GIỮA khung video/player lớn nhất (nhiều player play khi click)
+    if (!playing()) {
+      var target = biggest('video') || biggest('.jwplayer, #player, .video-js, .plyr, .player, [class*="player"]');
+      fireClick(target);
+    }
   }
   tryPlay();
   var n = 0;
-  var t = setInterval(function () { tryPlay(); if (++n > 22) clearInterval(t); }, 700);
+  var t = setInterval(function () { tryPlay(); if (++n > 25) clearInterval(t); }, 600);
 })();
 ''';
 
