@@ -41,11 +41,34 @@ class _MovieCardState extends State<MovieCard> {
               borderRadius: BorderRadius.circular(6),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Expanded(
-                  child: CachedNetworkImage(
-                    imageUrl: img, fit: BoxFit.cover,
-                    placeholder: (c, _) => Container(color: kSurface),
-                    errorWidget: (c, _, __) => Container(color: kSurface, child: const Icon(Icons.movie, color: Colors.white24)),
-                  ),
+                  child: Stack(fit: StackFit.expand, children: [
+                    CachedNetworkImage(
+                      imageUrl: img, fit: BoxFit.cover,
+                      placeholder: (c, _) => Container(color: kSurface),
+                      errorWidget: (c, _, __) => Container(color: kSurface, child: const Icon(Icons.movie, color: Colors.white24)),
+                    ),
+                    // Badge chất lượng (HD) góc trên trái
+                    if (widget.movie.quality.isNotEmpty)
+                      Positioned(
+                        top: 4, left: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: kRed, borderRadius: BorderRadius.circular(4)),
+                          child: Text(widget.movie.quality, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    // Badge tập/tình trạng góc dưới
+                    if (widget.movie.currentEpisode.isNotEmpty)
+                      Positioned(
+                        left: 4, right: 4, bottom: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.75), borderRadius: BorderRadius.circular(4)),
+                          child: Text(widget.movie.currentEpisode, maxLines: 1, overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 10)),
+                        ),
+                      ),
+                  ]),
                 ),
                 Container(
                   color: Colors.black,

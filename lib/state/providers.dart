@@ -32,8 +32,21 @@ final detailProvider = FutureProvider.family<MovieDetail, String>(
 
 // --- Search ---
 final searchProvider = FutureProvider.family<List<Movie>, String>((ref, q) async {
-  if (q.trim().length < 2) return [];
-  return ref.read(apiProvider).search(q.trim());
+  final query = q.trim();
+  if (query.length < 2) return [];
+  final res = await ref.read(apiProvider).search(query);
+  // Nguồn tìm KHÔNG phân biệt dấu (gõ "phàm nhân" ra cả "phạm nhân").
+  // Ưu tiên phim khớp đúng cả dấu lên đầu.
+  final ql = query.toLowerCase();
+  int rank(Movie m) {
+    final n = m.name.toLowerCase();
+    if (n == ql) return 0;
+    if (n.startsWith(ql)) return 1;
+    if (n.contains(ql)) return 2;
+    return 3;
+  }
+  res.sort((a, b) => rank(a).compareTo(rank(b)));
+  return res;
 });
 
 // --- Browse (phân trang, cuộn vô tận) ---
