@@ -37,6 +37,13 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   @override
   Widget build(BuildContext context) {
     final st = ref.watch(browseProvider(_q));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (st.page < st.totalPage && !st.loading && _scroll.hasClients &&
+          _scroll.position.maxScrollExtent < 400) {
+        ref.read(browseProvider(_q).notifier).loadMore();
+      }
+    });
     return Column(children: [
       _filterBar(),
       Expanded(
@@ -44,7 +51,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
           controller: _scroll,
           padding: const EdgeInsets.all(12),
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 170, childAspectRatio: 0.52, crossAxisSpacing: 8, mainAxisSpacing: 8),
+              maxCrossAxisExtent: 170, childAspectRatio: 0.6, crossAxisSpacing: 8, mainAxisSpacing: 8),
           itemCount: st.items.length,
           itemBuilder: (c, i) {
             final m = st.items[i];

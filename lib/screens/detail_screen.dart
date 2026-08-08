@@ -177,7 +177,8 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
   }
 
   void _play(MovieDetail d, ServerGroup s, List<Episode> eps, Episode ep) {
-    ref.read(storeProvider).saveProgress(slug: d.slug, server: s.serverName, episodeSlug: ep.slug, episodeName: ep.name);
+    final poster = d.thumbUrl.isNotEmpty ? d.thumbUrl : d.posterUrl;
+    ref.read(storeProvider).saveProgress(slug: d.slug, name: d.name, poster: poster, server: s.serverName, episodeSlug: ep.slug, episodeName: ep.name);
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => PlayerScreen(
         movieName: d.name,
@@ -185,7 +186,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         embedUrl: ep.embed,
         episodes: eps,
         startIndex: eps.indexOf(ep),
-        onEpisodeChange: (e) => ref.read(storeProvider).saveProgress(slug: d.slug, server: s.serverName, episodeSlug: e.slug, episodeName: e.name),
+        onEpisodeChange: (e) => ref.read(storeProvider).saveProgress(slug: d.slug, name: d.name, poster: poster, server: s.serverName, episodeSlug: e.slug, episodeName: e.name),
       ),
     ));
   }

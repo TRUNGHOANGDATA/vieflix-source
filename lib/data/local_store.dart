@@ -3,19 +3,26 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/movie.dart';
 
 class WatchProgress {
-  final String slug, server, episodeSlug, episodeName;
+  final String slug, name, poster, server, episodeSlug, episodeName;
   final int updatedAt;
   WatchProgress({
-    required this.slug, required this.server, required this.episodeSlug,
+    required this.slug, required this.name, required this.poster,
+    required this.server, required this.episodeSlug,
     required this.episodeName, required this.updatedAt,
   });
   Map<String, dynamic> toJson() => {
-        'slug': slug, 'server': server, 'episodeSlug': episodeSlug,
+        'slug': slug, 'name': name, 'poster': poster,
+        'server': server, 'episodeSlug': episodeSlug,
         'episodeName': episodeName, 'updatedAt': updatedAt,
       };
   factory WatchProgress.fromJson(Map<String, dynamic> j) => WatchProgress(
-        slug: j['slug'], server: j['server'], episodeSlug: j['episodeSlug'],
-        episodeName: j['episodeName'], updatedAt: j['updatedAt'],
+        slug: (j['slug'] ?? '').toString(),
+        name: (j['name'] ?? j['slug'] ?? '').toString(),
+        poster: (j['poster'] ?? '').toString(),
+        server: (j['server'] ?? '').toString(),
+        episodeSlug: (j['episodeSlug'] ?? '').toString(),
+        episodeName: (j['episodeName'] ?? '').toString(),
+        updatedAt: (j['updatedAt'] is int) ? j['updatedAt'] : 0,
       );
 }
 
@@ -60,9 +67,11 @@ class LocalStore {
   Future<void> saveProgress({
     required String slug, required String server,
     required String episodeSlug, required String episodeName,
+    String name = '', String poster = '',
   }) async {
     _progress[slug] = WatchProgress(
-      slug: slug, server: server, episodeSlug: episodeSlug,
+      slug: slug, name: name.isNotEmpty ? name : slug, poster: poster,
+      server: server, episodeSlug: episodeSlug,
       episodeName: episodeName, updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
     await _p.setString(_kProg,

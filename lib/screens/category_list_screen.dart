@@ -36,6 +36,16 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
   @override
   Widget build(BuildContext context) {
     final st = ref.watch(browseProvider(widget.query));
+    // Tự tải thêm cho tới khi nội dung đầy/vượt màn hình (khắc phục việc
+    // 1 trang chỉ vài phim, không đủ để cuộn nên không kích hoạt loadMore).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final more = st.page < st.totalPage;
+      if (more && !st.loading && _scroll.hasClients &&
+          _scroll.position.maxScrollExtent < 400) {
+        ref.read(browseProvider(widget.query).notifier).loadMore();
+      }
+    });
     return Scaffold(
       appBar: AppBar(backgroundColor: Colors.black, title: Text(widget.title)),
       body: Column(children: [
@@ -44,7 +54,7 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
             controller: _scroll,
             padding: const EdgeInsets.all(12),
             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 170, childAspectRatio: 0.52, crossAxisSpacing: 8, mainAxisSpacing: 8),
+                maxCrossAxisExtent: 170, childAspectRatio: 0.6, crossAxisSpacing: 8, mainAxisSpacing: 8),
             itemCount: st.items.length,
             itemBuilder: (c, i) {
               final m = st.items[i];

@@ -44,7 +44,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ? const Center(child: Text('Không tìm thấy phim', style: TextStyle(color: Colors.white38)))
                     : GridView.builder(
                         padding: const EdgeInsets.all(12),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 170, childAspectRatio: 0.52, crossAxisSpacing: 8, mainAxisSpacing: 8),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 170, childAspectRatio: 0.6, crossAxisSpacing: 8, mainAxisSpacing: 8),
                         itemCount: list.length,
                         itemBuilder: (c, i) {
                           final m = list[i];

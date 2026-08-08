@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../state/providers.dart';
 import '../widgets/movie_row.dart';
 import '../widgets/hero_banner.dart';
@@ -62,19 +63,50 @@ class HomeScreen extends ConsumerWidget {
         child: Text('Xem tiếp', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
       ),
       SizedBox(
-        height: 54,
-        child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 12), children: [
-          for (final p in cw)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ActionChip(
-                backgroundColor: kSurface,
-                avatar: const Icon(Icons.play_circle_fill, color: kRed),
-                label: Text('${p.slug}  ·  Tập ${p.episodeName}', style: const TextStyle(color: Colors.white)),
-                onPressed: () => _open(context, p.slug, p.slug),
+        height: 104,
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          itemCount: cw.length,
+          itemBuilder: (c, i) {
+            final p = cw[i];
+            return GestureDetector(
+              onTap: () => _open(context, p.slug, p.name),
+              child: Container(
+                width: 300,
+                margin: const EdgeInsets.only(right: 10),
+                decoration: BoxDecoration(color: kSurface, borderRadius: BorderRadius.circular(8)),
+                child: Row(children: [
+                  ClipRRect(
+                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                    child: SizedBox(
+                      width: 130, height: 104,
+                      child: p.poster.isNotEmpty
+                          ? CachedNetworkImage(imageUrl: p.poster, fit: BoxFit.cover,
+                              errorWidget: (c, _, __) => Container(color: Colors.black26, child: const Icon(Icons.movie, color: Colors.white24)))
+                          : Container(color: Colors.black26, child: const Icon(Icons.movie, color: Colors.white24)),
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                        const SizedBox(height: 6),
+                        Row(children: [
+                          const Icon(Icons.play_circle_fill, color: kRed, size: 18),
+                          const SizedBox(width: 4),
+                          Text('Xem tiếp Tập ${p.episodeName}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                        ]),
+                      ]),
+                    ),
+                  ),
+                ]),
               ),
-            ),
-        ]),
+            );
+          },
+        ),
       ),
     ]);
   }

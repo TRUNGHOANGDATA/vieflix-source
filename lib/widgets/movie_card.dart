@@ -39,9 +39,8 @@ class _MovieCardState extends State<MovieCard> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-                AspectRatio(
-                  aspectRatio: 2 / 3,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Expanded(
                   child: CachedNetworkImage(
                     imageUrl: img, fit: BoxFit.cover,
                     placeholder: (c, _) => Container(color: kSurface),
