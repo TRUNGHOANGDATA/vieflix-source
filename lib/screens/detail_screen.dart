@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../widgets/async_view.dart';
 import '../widgets/movie_row.dart';
 import '../player/player_screen.dart';
+import 'category_list_screen.dart';
 
 class DetailScreen extends ConsumerStatefulWidget {
   final String slug, title;
@@ -60,6 +61,14 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     return _defaultServer(servers);
   }
 
+  // Tên tập hiển thị: KKPhim đã có sẵn "Tập 01", nguonc chỉ có "1" -> tránh "Tập Tập"
+  String _epLabel(String name) {
+    final n = name.trim();
+    if (RegExp(r'^t[aậ]p\b', caseSensitive: false).hasMatch(n)) return n;
+    if (RegExp(r'^\d').hasMatch(n)) return 'Tập $n';
+    return n;
+  }
+
   // Sắp xếp tập theo số thứ tự (Tập 1,2,...,10,11 thay vì 1,10,11,2)
   List<Episode> _sorted(List<Episode> items) {
     int? num(String s) {
@@ -81,7 +90,12 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
   Widget build(BuildContext context) {
     final detail = ref.watch(detailProvider(widget.slug));
     return Scaffold(
-      appBar: AppBar(backgroundColor: Colors.black, title: Text(widget.title)),
+      appBar: AppBar(
+        backgroundColor: kBg,
+        elevation: 0,
+        foregroundColor: Colors.white,
+        title: Text(widget.title, style: const TextStyle(fontSize: 16)),
+      ),
       body: AsyncView<MovieDetail>(
         value: detail,
         onRetry: () => ref.invalidate(detailProvider(widget.slug)),
@@ -98,55 +112,78 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     final srv = hasServer ? _effServer(servers) : 0;
     final eps = hasServer ? _sorted(servers[srv].items) : <Episode>[];
     return ListView(children: [
-      SizedBox(
-        height: 320,
-        child: Stack(fit: StackFit.expand, children: [
-          CachedNetworkImage(imageUrl: d.posterUrl, fit: BoxFit.cover, errorWidget: (c, _, __) => Container(color: kSurface)),
-          Container(decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [kBg, Colors.transparent]))),
+      // Poster dọc bên trái + thông tin bên phải (ảnh gốc nguonc)
+      Padding(
+        padding: const EdgeInsets.fromLTRB(32, 24, 32, 8),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: CachedNetworkImage(
+              imageUrl: d.thumbUrl.isNotEmpty ? d.thumbUrl : d.posterUrl,
+              width: 260, height: 380, fit: BoxFit.cover,
+              placeholder: (c, _) => Container(width: 260, height: 380, color: kSurface),
+              errorWidget: (c, _, __) => Container(width: 260, height: 380, color: kSurface, child: const Icon(Icons.movie, color: Colors.white24, size: 48)),
+            ),
+          ),
+          const SizedBox(width: 28),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(d.name, style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold, height: 1.15)),
+              if (d.base.originalName.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(d.base.originalName, style: const TextStyle(color: Colors.amber, fontSize: 15)),
+                ),
+              const SizedBox(height: 12),
+              Wrap(spacing: 8, runSpacing: 6, children: [
+                if (d.year != null) _navChip(d.year!, 'Phim năm ${d.year}', BrowseQuery('year', d.year!)),
+                if (d.base.quality.isNotEmpty) _chip(d.base.quality),
+                for (final g in d.genres.take(3)) _navChip(g.name, g.name, BrowseQuery('genre', g.slug)),
+                for (final c in d.countries.take(1)) _navChip(c.name, 'Phim ${c.name}', BrowseQuery('country', c.slug)),
+              ]),
+              _ratingLine(d),
+              const SizedBox(height: 18),
+              Row(children: [
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: kRed, padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 16)),
+                  onPressed: hasServer ? () => _play(d, servers[srv], eps, eps.first) : null,
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Xem ngay', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+                    side: const BorderSide(color: Colors.white54),
+                  ),
+                  onPressed: () async {
+                    final favMovie = Movie.fromJson({
+                      'name': d.name, 'slug': d.slug,
+                      'poster_url': d.posterUrl, 'thumb_url': d.thumbUrl,
+                      'quality': d.base.quality, 'current_episode': d.base.currentEpisode,
+                      'total_episodes': d.base.totalEpisodes,
+                      'genres': d.genres.map((g) => g.name).toList(),
+                    });
+                    await store.toggleFavorite(favMovie);
+                    setState(() {});
+                  },
+                  icon: Icon(fav ? Icons.favorite : Icons.favorite_border, color: fav ? kRed : Colors.white),
+                  label: Text(fav ? 'Đã thích' : 'Yêu thích', style: const TextStyle(color: Colors.white)),
+                ),
+              ]),
+              const SizedBox(height: 16),
+              if (d.director != null) Text('Đạo diễn: ${d.director}', style: const TextStyle(color: Colors.white70)),
+              if (d.casts != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text('Diễn viên: ${d.casts}', style: const TextStyle(color: Colors.white70))),
+              const SizedBox(height: 12),
+              Text(d.description, style: const TextStyle(color: Colors.white70, height: 1.5)),
+            ]),
+          ),
         ]),
       ),
+      const SizedBox(height: 16),
       Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(32, 0, 32, 0),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(d.name, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, runSpacing: 4, children: [
-            if (d.year != null) _chip(d.year!),
-            if (d.base.quality.isNotEmpty) _chip(d.base.quality),
-            for (final g in d.genres.take(3)) _chip(g.name),
-            for (final c in d.countries.take(1)) _chip(c.name),
-          ]),
-          _ratingLine(d),
-          const SizedBox(height: 12),
-          Row(children: [
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: kRed),
-              onPressed: hasServer ? () => _play(d, servers[srv], eps, eps.first) : null,
-              icon: const Icon(Icons.play_arrow), label: const Text('Xem ngay'),
-            ),
-            const SizedBox(width: 12),
-            OutlinedButton.icon(
-              onPressed: () async {
-                final favMovie = Movie.fromJson({
-                  'name': d.name, 'slug': d.slug,
-                  'poster_url': d.posterUrl, 'thumb_url': d.thumbUrl,
-                  'quality': d.base.quality, 'current_episode': d.base.currentEpisode,
-                  'total_episodes': d.base.totalEpisodes,
-                  'genres': d.genres.map((g) => g.name).toList(),
-                });
-                await store.toggleFavorite(favMovie);
-                setState(() {});
-              },
-              icon: Icon(fav ? Icons.favorite : Icons.favorite_border, color: fav ? kRed : Colors.white),
-              label: Text(fav ? 'Đã thích' : 'Yêu thích', style: const TextStyle(color: Colors.white)),
-            ),
-          ]),
-          const SizedBox(height: 16),
-          if (d.director != null) Text('Đạo diễn: ${d.director}', style: const TextStyle(color: Colors.white70)),
-          if (d.casts != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text('Diễn viên: ${d.casts}', style: const TextStyle(color: Colors.white70))),
-          const SizedBox(height: 12),
-          Text(d.description, style: const TextStyle(color: Colors.white70, height: 1.4)),
-          const SizedBox(height: 20),
           if (hasServer) ...[
             // Chọn server (kèm số tập). Mặc định ưu tiên Thuyết minh.
             Wrap(spacing: 8, children: [
@@ -181,7 +218,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                     backgroundColor: kSurface,
                     padding: EdgeInsets.zero,
                     labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    label: Center(child: Text('Tập ${ep.name}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12))),
+                    label: Center(child: Text(_epLabel(ep.name), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12))),
                     onPressed: () => _play(d, servers[srv], eps, ep),
                   ),
                 ),
@@ -221,6 +258,15 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
       label: Text(s, style: const TextStyle(color: Colors.white, fontSize: 12)),
       backgroundColor: kSurface, visualDensity: VisualDensity.compact);
 
+  // Chip bấm được -> mở danh sách theo năm/thể loại/quốc gia
+  Widget _navChip(String label, String title, BrowseQuery query) => ActionChip(
+        label: Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
+        backgroundColor: kSurface,
+        visualDensity: VisualDensity.compact,
+        onPressed: () => Navigator.push(context,
+            MaterialPageRoute(builder: (_) => CategoryListScreen(title: title, query: query))),
+      );
+
   Widget _similar(MovieDetail d) {
     final v = ref.watch(genreRowProvider(d.genres.first.slug));
     return v.maybeWhen(
@@ -234,8 +280,9 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     );
   }
 
-  void _saveAndRefresh(MovieDetail d, ServerGroup s, Episode ep, String poster) {
-    ref.read(storeProvider).saveProgress(
+  Future<void> _saveAndRefresh(MovieDetail d, ServerGroup s, Episode ep, String poster) async {
+    // await để ghi xuống đĩa xong hẳn -> không mất khi đóng app đột ngột
+    await ref.read(storeProvider).saveProgress(
         slug: d.slug, name: d.name, poster: poster,
         server: s.serverName, episodeSlug: ep.slug, episodeName: ep.name);
     // Báo trang chủ cập nhật lại hàng "Xem tiếp" ngay

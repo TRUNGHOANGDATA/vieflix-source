@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "app_xem_phim" "\0"
+            VALUE "CompanyName", "VieFlix" "\0"
+            VALUE "FileDescription", "VieFlix" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "app_xem_phim" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "app_xem_phim.exe" "\0"
-            VALUE "ProductName", "app_xem_phim" "\0"
+            VALUE "InternalName", "VieFlix" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 VieFlix. All rights reserved." "\0"
+            VALUE "OriginalFilename", "VieFlix.exe" "\0"
+            VALUE "ProductName", "VieFlix" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -11,6 +11,22 @@ class Movie {
     required this.totalEpisodes, this.genres = const [],
   });
 
+  // Loại tiếng suy ra từ trường `language` (vd "Vietsub + Thuyết Minh")
+  bool get hasThuyetMinh {
+    final l = language.toLowerCase();
+    return l.contains('thuyết minh') || l.contains('thuyet minh') || l.contains('t.minh');
+  }
+
+  bool get hasLongTieng {
+    final l = language.toLowerCase();
+    return l.contains('lồng tiếng') || l.contains('long tieng');
+  }
+
+  bool get hasPhuDe {
+    final l = language.toLowerCase();
+    return l.contains('vietsub') || l.contains('phụ đề') || l.contains('phu de') || l.contains('sub');
+  }
+
   factory Movie.fromJson(Map<String, dynamic> j) => Movie(
         name: (j['name'] ?? '').toString(),
         slug: (j['slug'] ?? '').toString(),

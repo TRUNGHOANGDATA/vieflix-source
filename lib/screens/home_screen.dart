@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../models/movie.dart';
 import '../state/providers.dart';
 import '../widgets/movie_row.dart';
-import '../widgets/hero_carousel.dart';
-import '../widgets/async_view.dart';
+import '../widgets/movie_card.dart';
+import '../widgets/paginated_movie_row.dart';
 import '../theme/app_theme.dart';
 import '../data/local_store.dart';
 import 'detail_screen.dart';
 import 'category_list_screen.dart';
+
+// Tên tập hiển thị: tránh "Tập Tập 08" khi nguồn (KKPhim) đã có sẵn chữ "Tập"
+String _epText(String name) {
+  final n = name.trim();
+  if (RegExp(r'^t[aậ]p\b', caseSensitive: false).hasMatch(n)) return n;
+  return 'Tập $n';
+}
 
 /// Thẻ "Xem tiếp" (ảnh dọc): tự lấy poster + tên + tổng số tập từ API theo slug.
 class ContinueCard extends ConsumerWidget {
@@ -24,12 +32,12 @@ class ContinueCard extends ConsumerWidget {
         final img = det.posterUrl.isNotEmpty ? det.posterUrl : det.thumbUrl;
         final avail = det.servers.isNotEmpty ? det.servers.first.items.length : 0;
         final total = det.base.totalEpisodes > avail ? det.base.totalEpisodes : (avail > 0 ? avail : det.base.totalEpisodes);
-        final sub = total > 1 ? 'Tập ${progress.episodeName} / $total' : 'Xem tiếp';
+        final sub = total > 1 ? '${_epText(progress.episodeName)} / $total' : 'Xem tiếp';
         return _card(context, ref, img, det.name, sub, det.slug, det.name);
       },
       orElse: () {
         final name = progress.name.isNotEmpty ? progress.name : progress.slug;
-        return _card(context, ref, progress.poster, name, 'Tập ${progress.episodeName}', progress.slug, name);
+        return _card(context, ref, progress.poster, name, _epText(progress.episodeName), progress.slug, name);
       },
     );
   }
@@ -40,11 +48,15 @@ class ContinueCard extends ConsumerWidget {
   }
 
   Widget _card(BuildContext context, WidgetRef ref, String img, String name, String sub, String slug, String openName) {
-    return GestureDetector(
-      onTap: () => onOpen(slug, openName),
-      child: Container(
-        width: 150,
-        margin: const EdgeInsets.symmetric(horizontal: 6),
+    final preview = Movie(
+      name: openName, slug: slug, originalName: '', thumbUrl: img, posterUrl: img,
+      description: '', quality: '', language: '', currentEpisode: '', totalEpisodes: 0,
+    );
+    return HoverPreview(
+      movie: preview,
+      onOpen: () => onOpen(slug, openName),
+      builder: (_) => Container(
+        margin: const EdgeInsets.all(4),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: Stack(fit: StackFit.expand, children: [
@@ -99,40 +111,35 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(homeRefreshProvider); // vẽ lại khi xoá mục Xem tiếp
-    final latest = ref.watch(latestProvider);
-    return AsyncView(
-      value: latest,
-      onRetry: () => ref.invalidate(latestProvider),
-      builder: (page) {
-        final movies = page.items;
-        return ListView(children: [
-          if (movies.isNotEmpty)
-            HeroCarousel(
-              movies: movies.take(6).toList(),
-              onOpen: (m) => _open(context, m.slug, m.name),
-            ),
-          _continueRow(ref, context),
-          _recommendedRow(ref, context),
-          MovieRow(title: 'Mới cập nhật', movies: movies, onTap: (m) => _open(context, m.slug, m.name)),
-          // Ưu tiên theo quốc gia
-          _countryRow(ref, context, 'Phim Trung Quốc', 'trung-quoc'),
-          _countryRow(ref, context, 'Phim Hàn Quốc', 'han-quoc'),
-          _countryRow(ref, context, 'Phim Việt Nam', 'viet-nam'),
-          _countryRow(ref, context, 'Phim Nhật Bản', 'nhat-ban'),
-          _countryRow(ref, context, 'Phim Âu Mỹ', 'au-my'),
-          // Rồi tới thể loại
-          _genreRow(ref, context, 'Hành Động', 'hanh-dong'),
-          _genreRow(ref, context, 'Tình Cảm', 'tinh-cam'),
-          _genreRow(ref, context, 'Kinh Dị', 'kinh-di'),
-          _genreRow(ref, context, 'Hài', 'hai'),
-          _genreRow(ref, context, 'Cổ Trang', 'co-trang'),
-          // Rồi tới loại phim
-          _typeRow(ref, context, 'Hoạt Hình', 'hoat-hinh'),
-          _typeRow(ref, context, 'TV Shows', 'tv-shows'),
-          const SizedBox(height: 40),
-        ]);
-      },
-    );
+    return ListView(children: [
+      const SizedBox(height: 12),
+      _continueRow(ref, context),
+      _personalRow(ref, context),
+      _recommendedRow(ref, context),
+      PaginatedMovieRow(
+        title: 'Mới cập nhật',
+        query: const BrowseQuery('all', ''),
+        onTap: (m) => _open(context, m.slug, m.name),
+        onSeeMore: () => _seeMore(context, 'Phim mới cập nhật', const BrowseQuery('all', '')),
+      ),
+      // Ưu tiên theo quốc gia
+      _countryRow(ref, context, 'Phim Trung Quốc', 'trung-quoc'),
+      _countryRow(ref, context, 'Phim Hàn Quốc', 'han-quoc'),
+      _countryRow(ref, context, 'Phim Việt Nam', 'viet-nam'),
+      _countryRow(ref, context, 'Phim Nhật Bản', 'nhat-ban'),
+      _countryRow(ref, context, 'Phim Thái Lan', 'thai-lan'),
+      _countryRow(ref, context, 'Phim Âu Mỹ', 'au-my'),
+      // Rồi tới thể loại
+      _genreRow(ref, context, 'Hành Động', 'hanh-dong'),
+      _genreRow(ref, context, 'Tình Cảm', 'tinh-cam'),
+      _genreRow(ref, context, 'Kinh Dị', 'kinh-di'),
+      _genreRow(ref, context, 'Hài', 'hai'),
+      _genreRow(ref, context, 'Cổ Trang', 'co-trang'),
+      // Rồi tới loại phim
+      _typeRow(ref, context, 'Hoạt Hình', 'hoat-hinh'),
+      _typeRow(ref, context, 'TV Shows', 'tv-shows'),
+      const SizedBox(height: 40),
+    ]);
   }
 
   Widget _continueRow(WidgetRef ref, BuildContext context) {
@@ -149,9 +156,12 @@ class HomeScreen extends ConsumerWidget {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           itemCount: cw.length,
-          itemBuilder: (c, i) => ContinueCard(
-            progress: cw[i],
-            onOpen: (slug, name) => _open(context, slug, name),
+          itemBuilder: (c, i) => SizedBox(
+            width: 158,
+            child: ContinueCard(
+              progress: cw[i],
+              onOpen: (slug, name) => _open(context, slug, name),
+            ),
           ),
         ),
       ),
@@ -160,6 +170,20 @@ class HomeScreen extends ConsumerWidget {
 
   void _seeMore(BuildContext c, String title, BrowseQuery q) => Navigator.of(c).push(
       MaterialPageRoute(builder: (_) => CategoryListScreen(title: title, query: q)));
+
+  Widget _personalRow(WidgetRef ref, BuildContext c) {
+    final v = ref.watch(personalRecProvider);
+    return v.maybeWhen(
+      data: (res) => res == null
+          ? const SizedBox.shrink()
+          : MovieRow(
+              title: '🎯 Vì bạn hay xem ${res.$1}',
+              movies: res.$2,
+              onTap: (m) => _open(c, m.slug, m.name),
+            ),
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
 
   Widget _recommendedRow(WidgetRef ref, BuildContext c) {
     final rec = ref.watch(recommendedProvider);
@@ -175,36 +199,27 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _typeRow(WidgetRef ref, BuildContext c, String title, String type) {
-    final v = ref.watch(typeRowProvider(type));
-    return v.maybeWhen(
-      data: (list) => MovieRow(
-        title: title, movies: list, onTap: (m) => _open(c, m.slug, m.name),
+  Widget _typeRow(WidgetRef ref, BuildContext c, String title, String type) =>
+      PaginatedMovieRow(
+        title: title,
+        query: BrowseQuery('type', type),
+        onTap: (m) => _open(c, m.slug, m.name),
         onSeeMore: () => _seeMore(c, title, BrowseQuery('type', type)),
-      ),
-      orElse: () => const SizedBox(height: 8),
-    );
-  }
+      );
 
-  Widget _genreRow(WidgetRef ref, BuildContext c, String title, String slug) {
-    final v = ref.watch(genreRowProvider(slug));
-    return v.maybeWhen(
-      data: (list) => MovieRow(
-        title: title, movies: list, onTap: (m) => _open(c, m.slug, m.name),
+  Widget _genreRow(WidgetRef ref, BuildContext c, String title, String slug) =>
+      PaginatedMovieRow(
+        title: title,
+        query: BrowseQuery('genre', slug),
+        onTap: (m) => _open(c, m.slug, m.name),
         onSeeMore: () => _seeMore(c, title, BrowseQuery('genre', slug)),
-      ),
-      orElse: () => const SizedBox(height: 8),
-    );
-  }
+      );
 
-  Widget _countryRow(WidgetRef ref, BuildContext c, String title, String slug) {
-    final v = ref.watch(countryRowProvider(slug));
-    return v.maybeWhen(
-      data: (list) => MovieRow(
-        title: title, movies: list, onTap: (m) => _open(c, m.slug, m.name),
+  Widget _countryRow(WidgetRef ref, BuildContext c, String title, String slug) =>
+      PaginatedMovieRow(
+        title: title,
+        query: BrowseQuery('country', slug),
+        onTap: (m) => _open(c, m.slug, m.name),
         onSeeMore: () => _seeMore(c, title, BrowseQuery('country', slug)),
-      ),
-      orElse: () => const SizedBox(height: 8),
-    );
-  }
+      );
 }

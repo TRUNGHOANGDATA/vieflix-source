@@ -1,0 +1,9 @@
+# MẪU cấu hình khóa ký APK. Sao chép file này thành "key.properties" (cùng thư mục
+# android/) rồi điền đúng thông tin khóa của bạn. File key.properties THẬT đã được
+# .gitignore (không đưa lên git) vì chứa mật khẩu.
+#
+# storeFile trỏ tới file khóa .jks. Đường dẫn tính từ thư mục android/.
+storePassword=matkhau_cua_ban
+keyPassword=matkhau_cua_ban
+keyAlias=vieflix
+storeFile=vieflix-release.jks

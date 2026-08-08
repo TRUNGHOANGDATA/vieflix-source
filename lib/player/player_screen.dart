@@ -7,6 +7,13 @@ import '../models/episode.dart';
 import '../theme/app_theme.dart';
 import 'ad_blocker.dart';
 
+// Tên tập hiển thị: tránh "Tập Tập 01" khi nguồn đã có sẵn chữ "Tập"
+String _epDisplay(String name) {
+  final n = name.trim();
+  if (RegExp(r'^t[aậ]p\b', caseSensitive: false).hasMatch(n)) return n;
+  return 'Tập $n';
+}
+
 class PlayerScreen extends StatefulWidget {
   final String movieName, posterUrl, embedUrl;
   final List<Episode> episodes;
@@ -105,7 +112,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 2),
-                    Text(total > 1 ? 'Tập $epName / $total' : 'Phim lẻ',
+                    Text(total > 1 ? '${_epDisplay(epName)} / $total' : 'Phim lẻ',
                         style: const TextStyle(color: Colors.white60, fontSize: 13)),
                   ],
                 ),
@@ -146,7 +153,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
               child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 IconButton(icon: const Icon(Icons.skip_previous, color: Colors.white), onPressed: _idx > 0 ? () => _goto(_idx - 1) : null),
-                Text('Tập $epName / $total', style: const TextStyle(color: Colors.white)),
+                Text('${_epDisplay(epName)} / $total', style: const TextStyle(color: Colors.white)),
                 IconButton(icon: const Icon(Icons.skip_next, color: Colors.white), onPressed: _idx < widget.episodes.length - 1 ? () => _goto(_idx + 1) : null),
               ]),
             ),

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 const kBg = Color(0xFF141414);
@@ -11,7 +12,8 @@ final appTheme = ThemeData(
     primary: kRed,
     surface: kSurface,
   ),
-  fontFamily: 'Be Vietnam Pro',
+  // Windows: dùng Segoe UI hệ thống. Android (TV): dùng Be Vietnam Pro đóng gói sẵn.
+  fontFamily: Platform.isWindows ? 'Segoe UI' : 'Be Vietnam Pro',
   useMaterial3: true,
   elevatedButtonTheme: ElevatedButtonThemeData(
     style: ElevatedButton.styleFrom(

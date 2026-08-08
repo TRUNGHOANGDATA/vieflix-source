@@ -23,7 +23,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'App Xem Phim',
+      title: 'VieFlix',
       debugShowCheckedModeBanner: false,
       theme: appTheme,
       home: const AppShell(),

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/movie.dart';
 import '../state/providers.dart';
@@ -21,6 +23,8 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
   final _scroll = ScrollController();
   late BrowseQuery _q;
   String _keyword = '';
+  final Set<String> _langs = {}; // rỗng = mọi loại; chứa: phude/thuyetminh/longtieng (chọn nhiều)
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -31,12 +35,80 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
         ref.read(browseProvider(_q).notifier).loadMore();
       }
     });
+    HardwareKeyboard.instance.addHandler(_onKey);
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    _debounce?.cancel();
     _scroll.dispose();
     super.dispose();
+  }
+
+  bool _onKey(KeyEvent e) {
+    if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _onKeyword(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) setState(() => _keyword = v);
+    });
+  }
+
+  // Lọc theo loại tiếng (phía app). Chọn nhiều -> khớp 1 trong các loại đã chọn.
+  List<Movie> _applyLang(List<Movie> items) {
+    if (_langs.isEmpty) return items;
+    return items.where((m) =>
+        (_langs.contains('phude') && m.hasPhuDe) ||
+        (_langs.contains('thuyetminh') && m.hasThuyetMinh) ||
+        (_langs.contains('longtieng') && m.hasLongTieng)).toList();
+  }
+
+  Widget _langChips() {
+    // val == null là nút "Mọi loại tiếng" (xoá hết lựa chọn)
+    Widget chip(String label, String? val) {
+      final selected = val == null ? _langs.isEmpty : _langs.contains(val);
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: FilterChip(
+          label: Text(label),
+          selected: selected,
+          selectedColor: kRed,
+          checkmarkColor: Colors.white,
+          labelStyle: TextStyle(color: selected ? Colors.white : Colors.white70),
+          backgroundColor: kSurface,
+          side: BorderSide.none,
+          onSelected: (_) => setState(() {
+            if (val == null) {
+              _langs.clear();
+            } else if (_langs.contains(val)) {
+              _langs.remove(val);
+            } else {
+              _langs.add(val);
+            }
+          }),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+      child: Row(children: [
+        chip('Mọi loại tiếng', null),
+        chip('Phụ đề', 'phude'),
+        chip('Thuyết minh', 'thuyetminh'),
+        chip('Lồng tiếng', 'longtieng'),
+      ]),
+    );
   }
 
   Widget _grid(List<Movie> items) => GridView.builder(
@@ -71,18 +143,22 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
               filled: true, fillColor: kSurface, isDense: true,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
             ),
-            onChanged: (v) => setState(() => _keyword = v),
+            onChanged: _onKeyword,
           ),
         ),
         if (!searching) FilterBar(current: _q, onChanged: (q) => setState(() => _q = q)),
+        _langChips(),
         Expanded(
           child: searching
               ? AsyncView(
                   value: ref.watch(searchProvider(_keyword)),
                   onRetry: () => ref.invalidate(searchProvider(_keyword)),
-                  builder: (list) => list.isEmpty
-                      ? const Center(child: Text('Không tìm thấy phim', style: TextStyle(color: Colors.white38)))
-                      : _grid(list),
+                  builder: (list) {
+                    final f = _applyLang(list);
+                    return f.isEmpty
+                        ? const Center(child: Text('Không tìm thấy phim', style: TextStyle(color: Colors.white38)))
+                        : _grid(f);
+                  },
                 )
               : _browseBody(),
         ),
@@ -100,7 +176,7 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
       }
     });
     return Column(children: [
-      Expanded(child: _grid(st.items)),
+      Expanded(child: _grid(_applyLang(st.items))),
       if (st.loading) const Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator(color: kRed)),
     ]);
   }

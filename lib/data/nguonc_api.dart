@@ -20,21 +20,27 @@ class NguoncApi {
   NguoncApi({http.Client? client}) : _client = client ?? http.Client();
 
   Future<Map<String, dynamic>> _getJson(String path) async {
-    late http.Response r;
-    try {
-      r = await _client.get(Uri.parse('$_base$path'),
-          headers: {'User-Agent': _ua, 'Accept': 'application/json'});
-    } catch (e) {
-      throw ApiException('Lỗi mạng: $e');
+    Object? lastErr;
+    // Thử tối đa 3 lần: nguonc thỉnh thoảng lỗi tạm thời (5xx / rớt mạng).
+    for (int attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await Future.delayed(Duration(milliseconds: 300 * attempt));
+      }
+      try {
+        final r = await _client.get(
+          Uri.parse('$_base$path'),
+          headers: {'User-Agent': _ua, 'Accept': 'application/json'},
+        ).timeout(const Duration(seconds: 12));
+        if (r.statusCode != 200) {
+          lastErr = ApiException('Máy chủ trả về ${r.statusCode}');
+          continue; // thử lại
+        }
+        return jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      } catch (e) {
+        lastErr = e; // lỗi mạng / timeout / JSON hỏng -> thử lại
+      }
     }
-    if (r.statusCode != 200) {
-      throw ApiException('Máy chủ trả về ${r.statusCode}');
-    }
-    try {
-      return jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
-    } catch (e) {
-      throw ApiException('Dữ liệu không hợp lệ');
-    }
+    throw ApiException('Không tải được dữ liệu (thử lại vẫn lỗi): $lastErr');
   }
 
   Paginated<Movie> _parseList(Map<String, dynamic> j) {
