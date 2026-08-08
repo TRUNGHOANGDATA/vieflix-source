@@ -14,7 +14,10 @@ Quy trình đầy đủ để ra một bản VieFlix mới: tăng phiên bản �
 - Exe sau build: `build/windows/x64/runner/Release/VieFlix.exe`
 - APK sau build: `build/app/outputs/flutter-apk/app-release.apk`
 - Phiên bản app nằm ở hằng `kAppVersion` trong `lib/data/update_checker.dart`
-- **Mỗi release đăng CẢ HAI file**: `.zip` (Windows) và `.apk` (Android TV). App tự cập nhật chọn đúng file theo nền tảng đang chạy.
+- **Mỗi release đăng CẢ HAI file**: bộ cài Windows `VieFlix-Setup-vX.Y.Z.exe` và Android `VieFlix-TV.apk`. App tự cập nhật chọn đúng file theo nền tảng đang chạy.
+- ⚠️ **APK PHẢI đặt tên đúng `VieFlix-TV.apk`** (KHÔNG kèm số phiên bản) để link tải cố định luôn trỏ bản mới nhất:
+  `https://github.com/TRUNGHOANGDATA/vieflix/releases/latest/download/VieFlix-TV.apk`
+  Link ngắn user dùng trên app Downloader của TV: **`tinyurl.com/23h3geuo`** (đã tạo, trỏ vào link trên — không cần tạo lại mỗi bản).
 - Khóa ký APK CỐ ĐỊNH: `android/vieflix-release.jks` + `android/key.properties` (KHÔNG đổi khóa giữa các bản, nếu không Android từ chối cập nhật đè). Xem `docs/ANDROID_TV.md`.
 
 ## Các bước
