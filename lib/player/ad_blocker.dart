@@ -95,9 +95,29 @@ const String kAutoPlayScript = r'''
       fireClick(target);
     }
   }
+  // Hộp "THÔNG BÁO! Bạn đã dừng lại ở ..." của trang: remote không bấm được,
+  // nên tự chọn giúp. Mặc định "Tiếp tục xem"; nếu app yêu cầu xem lại từ đầu
+  // (window.__VIEFLIX_RESTART) thì bấm "Xem lại từ đầu".
+  function answerResumeDialog() {
+    try {
+      var want = window.__VIEFLIX_RESTART ? 'xem lại từ đầu' : 'tiếp tục xem';
+      var els = document.querySelectorAll('button, a, div, span, input[type="button"]');
+      for (var i = 0; i < els.length; i++) {
+        var el = els[i];
+        if (!el || el.offsetParent === null) continue;
+        var t = (el.textContent || el.value || '').toString().trim().toLowerCase();
+        if (!t || t.length > 30 || el.children.length > 2) continue;
+        if (t.indexOf(want) >= 0) { fireClick(el); return true; }
+      }
+    } catch (e) {}
+    return false;
+  }
+
   tryPlay();
+  answerResumeDialog();
   var n = 0;
   var t = setInterval(function () {
+    answerResumeDialog();
     tryPlay();
     // Ghi trạng thái để chẩn đoán khi phim không tự chạy (xem log của app).
     if (n === 3 || n === 12) {
