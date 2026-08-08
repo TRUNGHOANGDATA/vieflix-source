@@ -39,6 +39,38 @@ List<ContentBlocker> adContentBlockers() {
       .toList();
 }
 
+/// JS chạy SAU khi trang tải xong: tự động phát video (remote trên TV khó "bấm"
+/// nút play trong trang web). Thử gọi video.play() và bấm nút play của các player
+/// phổ biến (jwplayer/video.js/plyr...) trong ~15s vì player khởi tạo bất đồng bộ.
+const String kAutoPlayScript = r'''
+(function () {
+  function tryPlay() {
+    try {
+      var v = document.querySelector('video');
+      if (v) {
+        var p = v.play();
+        if (p && p.catch) p.catch(function () { try { v.muted = true; v.play(); } catch (e) {} });
+      }
+    } catch (e) {}
+    try {
+      var v2 = document.querySelector('video');
+      if (!v2 || v2.paused) {
+        var sels = ['.jw-icon-display', '.jw-display-icon-container', '.vjs-big-play-button',
+                    '.plyr__control--overlaid', 'button[aria-label*="Play"]', 'button[title*="Play"]',
+                    '[class*="play-button"]', '[class*="btn-play"]', '[class*="vjs-play"]'];
+        for (var i = 0; i < sels.length; i++) {
+          var b = document.querySelector(sels[i]);
+          if (b && b.offsetParent !== null) { try { b.click(); } catch (e) {} break; }
+        }
+      }
+    } catch (e) {}
+  }
+  tryPlay();
+  var n = 0;
+  var t = setInterval(function () { tryPlay(); if (++n > 22) clearInterval(t); }, 700);
+})();
+''';
+
 /// JS tiêm sớm (document start): chặn popup, ẩn overlay, VÀ chặn quảng cáo
 /// VAST pre-roll bằng cách xoá cấu hình `advertising` khỏi jwplayer.setup(),
 /// kèm tự bấm "Bỏ qua quảng cáo" làm phương án dự phòng.

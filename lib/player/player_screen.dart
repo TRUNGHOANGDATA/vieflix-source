@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -117,9 +118,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ],
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.only(right: 8),
-                child: Text('Nhấn ESC để thoát', style: TextStyle(color: Colors.white24, fontSize: 12)),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(Platform.isAndroid ? 'Nhấn Back để thoát' : 'Nhấn ESC để thoát',
+                    style: const TextStyle(color: Colors.white24, fontSize: 12)),
               ),
             ]),
           ),
@@ -131,8 +133,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 javaScriptCanOpenWindowsAutomatically: false,
                 supportMultipleWindows: false,
                 mediaPlaybackRequiresUserGesture: false,
-                transparentBackground: true,
-                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                allowsInlineMediaPlayback: true,
+                iframeAllowFullscreen: true,
+                // Android: KHÔNG để nền trong suốt (làm video đen), và bật các cấu hình cần cho video.
+                transparentBackground: !Platform.isAndroid,
+                useHybridComposition: true,
+                // Cho phép stream http nằm trong trang https (nhiều nguồn phim vậy).
+                mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+                domStorageEnabled: true,
+                databaseEnabled: true,
+                userAgent:
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
               ),
               initialUserScripts: UnmodifiableListView([
                 UserScript(source: kAntiAdUserScript, injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START),
@@ -144,6 +155,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 return NavigationActionPolicy.ALLOW;
               },
               onCreateWindow: (c, req) async => false,
+              // Sau khi trang tải xong: tự động phát (remote khó "bấm" nút play trong web).
+              onLoadStop: (c, url) async {
+                try { await c.evaluateJavascript(source: kAutoPlayScript); } catch (_) {}
+              },
             ),
           ),
           // Thanh dưới: chuyển tập
