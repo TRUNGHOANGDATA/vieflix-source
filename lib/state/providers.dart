@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/nguonc_api.dart';
 import '../data/local_store.dart';
+import '../data/tmdb_api.dart';
 import '../models/movie.dart';
 import '../models/movie_detail.dart';
 import '../models/paginated.dart';
@@ -12,6 +13,35 @@ final homeRefreshProvider = StateProvider<int>((ref) => 0);
 
 /// storeProvider được override ở main sau khi init().
 final storeProvider = Provider<LocalStore>((ref) => throw UnimplementedError());
+
+/// Khóa TMDB (override ở main từ store; cập nhật khi lưu ở Cài đặt).
+final tmdbKeyProvider = StateProvider<String>((ref) => '');
+
+/// Điểm rating TMDB theo tên (ưu tiên tên gốc). Null nếu chưa có khóa/không khớp.
+final tmdbRatingProvider = FutureProvider.family<TmdbResult?, String>((ref, query) async {
+  final key = ref.watch(tmdbKeyProvider);
+  if (key.isEmpty || query.trim().isEmpty) return null;
+  return TmdbApi(key).rating(query);
+});
+
+/// Phim đề cử: lấy phim mới, chấm điểm TMDB rồi xếp theo điểm cao. Rỗng nếu chưa có khóa.
+final recommendedProvider = FutureProvider<List<(Movie, double)>>((ref) async {
+  final key = ref.watch(tmdbKeyProvider);
+  if (key.isEmpty) return [];
+  final api = ref.read(apiProvider);
+  final p1 = await api.latest(page: 1);
+  final p2 = await api.latest(page: 2);
+  final items = [...p1.items, ...p2.items];
+  final tmdb = TmdbApi(key);
+  final rated = <(Movie, double)>[];
+  await Future.wait(items.map((m) async {
+    final q = m.originalName.isNotEmpty ? m.originalName : m.name;
+    final r = await tmdb.rating(q);
+    if (r != null) rated.add((m, r.rating));
+  }));
+  rated.sort((a, b) => b.$2.compareTo(a.$2));
+  return rated.take(12).toList();
+});
 
 // --- Home rows ---
 final latestProvider =

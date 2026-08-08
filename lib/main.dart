@@ -10,7 +10,10 @@ Future<void> main() async {
   final store = LocalStore();
   await store.init();
   runApp(ProviderScope(
-    overrides: [storeProvider.overrideWithValue(store)],
+    overrides: [
+      storeProvider.overrideWithValue(store),
+      tmdbKeyProvider.overrideWith((ref) => store.tmdbKey),
+    ],
     child: const MyApp(),
   ));
 }

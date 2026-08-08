@@ -29,6 +29,7 @@ class WatchProgress {
 class LocalStore {
   static const _kFav = 'favorites_v1';
   static const _kProg = 'progress_v1';
+  static const _kTmdb = 'tmdb_key';
   static const _maxProgress = 30; // Giữ 30 phim xem gần nhất (nhẹ cho TV)
   late SharedPreferences _p;
   final List<Movie> _favorites = [];
@@ -53,6 +54,10 @@ class LocalStore {
         'genres': m.genres,
       };
   Map<String, dynamic> _favFromStored(dynamic e) => (e as Map).cast<String, dynamic>();
+
+  // --- Khóa TMDB (rating) ---
+  String get tmdbKey => _p.getString(_kTmdb) ?? '';
+  Future<void> setTmdbKey(String k) async => _p.setString(_kTmdb, k.trim());
 
   List<Movie> get favorites => List.unmodifiable(_favorites);
   bool isFavorite(String slug) => _favorites.any((m) => m.slug == slug);

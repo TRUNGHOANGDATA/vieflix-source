@@ -116,6 +116,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
             for (final g in d.genres.take(3)) _chip(g.name),
             for (final c in d.countries.take(1)) _chip(c.name),
           ]),
+          _ratingLine(d),
           const SizedBox(height: 12),
           Row(children: [
             ElevatedButton.icon(
@@ -192,6 +193,28 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
       if (d.genres.isNotEmpty) _similar(d),
       const SizedBox(height: 30),
     ]);
+  }
+
+  Widget _ratingLine(MovieDetail d) {
+    final q = d.base.originalName.isNotEmpty ? d.base.originalName : d.name;
+    final rating = ref.watch(tmdbRatingProvider(q));
+    return rating.maybeWhen(
+      data: (res) => res == null
+          ? const SizedBox.shrink()
+          : Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Row(children: [
+                const Icon(Icons.star, color: Colors.amber, size: 22),
+                const SizedBox(width: 4),
+                Text(res.rating.toStringAsFixed(1),
+                    style: const TextStyle(color: Colors.amber, fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('/10', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                const SizedBox(width: 8),
+                Text('TMDB · ${res.votes} lượt đánh giá', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              ]),
+            ),
+      orElse: () => const SizedBox.shrink(),
+    );
   }
 
   Widget _chip(String s) => Chip(

@@ -4,6 +4,7 @@ import 'home_screen.dart';
 import 'browse_screen.dart';
 import 'search_screen.dart';
 import 'my_list_screen.dart';
+import 'settings_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -16,7 +17,7 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    const pages = [HomeScreen(), BrowseScreen(), SearchScreen(), MyListScreen()];
+    const pages = [HomeScreen(), BrowseScreen(), SearchScreen(), MyListScreen(), SettingsScreen()];
     return Scaffold(
       body: Row(children: [
         NavigationRail(
@@ -37,6 +38,7 @@ class _AppShellState extends State<AppShell> {
             NavigationRailDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view), label: Text('Duyệt')),
             NavigationRailDestination(icon: Icon(Icons.search), selectedIcon: Icon(Icons.search), label: Text('Tìm kiếm')),
             NavigationRailDestination(icon: Icon(Icons.favorite_outline), selectedIcon: Icon(Icons.favorite), label: Text('Yêu thích')),
+            NavigationRailDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: Text('Cài đặt')),
           ],
         ),
         const VerticalDivider(width: 1, color: Colors.white10),

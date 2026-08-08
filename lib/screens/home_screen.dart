@@ -114,6 +114,7 @@ class HomeScreen extends ConsumerWidget {
               onInfo: () => _open(context, hero.slug, hero.name),
             ),
           _continueRow(ref, context),
+          _recommendedRow(ref, context),
           MovieRow(title: 'Mới cập nhật', movies: movies, onTap: (m) => _open(context, m.slug, m.name)),
           // Ưu tiên theo quốc gia
           _countryRow(ref, context, 'Phim Trung Quốc', 'trung-quoc'),
@@ -161,6 +162,20 @@ class HomeScreen extends ConsumerWidget {
 
   void _seeMore(BuildContext c, String title, BrowseQuery q) => Navigator.of(c).push(
       MaterialPageRoute(builder: (_) => CategoryListScreen(title: title, query: q)));
+
+  Widget _recommendedRow(WidgetRef ref, BuildContext c) {
+    final rec = ref.watch(recommendedProvider);
+    return rec.maybeWhen(
+      data: (list) => list.isEmpty
+          ? const SizedBox.shrink()
+          : MovieRow(
+              title: '⭐ Phim đề cử (điểm cao)',
+              movies: list.map((e) => e.$1).toList(),
+              onTap: (m) => _open(c, m.slug, m.name),
+            ),
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
 
   Widget _typeRow(WidgetRef ref, BuildContext c, String title, String type) {
     final v = ref.watch(typeRowProvider(type));
