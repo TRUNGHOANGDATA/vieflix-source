@@ -52,6 +52,45 @@ const String kAntiAdUserScript = r'''
       value: { launch: function(){}, addListener: function(){} },
       configurable: true
     }); } catch (e) {}
+
+    // 2b) CHẶN TẬN GỐC: bọc jwplayer bằng Proxy (giữ nguyên mọi thuộc tính),
+    //     chỉ xoá 'advertising'/'ads' khỏi config khi setup -> ad không được nạp.
+    try {
+      var _jwReal;
+      function makeProxy(orig) {
+        if (!orig || orig.__adProxied) return orig;
+        var pr = new Proxy(orig, {
+          apply: function (target, thisArg, args) {
+            var inst = Reflect.apply(target, thisArg, args);
+            try {
+              if (inst && typeof inst.setup === 'function' && !inst.__adStrip) {
+                inst.__adStrip = 1;
+                var origSetup = inst.setup.bind(inst);
+                inst.setup = function (cfg) {
+                  try {
+                    if (cfg && typeof cfg === 'object') {
+                      delete cfg.advertising;
+                      delete cfg.ads;
+                      if (cfg.plugins) { try { delete cfg.plugins.vast; delete cfg.plugins.googima; } catch (e) {} }
+                    }
+                  } catch (e) {}
+                  return origSetup(cfg);
+                };
+              }
+            } catch (e) {}
+            return inst;
+          }
+        });
+        try { orig.__adProxied = 1; } catch (e) {}
+        return pr;
+      }
+      Object.defineProperty(window, 'jwplayer', {
+        configurable: true,
+        get: function () { return _jwReal; },
+        set: function (v) { _jwReal = makeProxy(v); }
+      });
+    } catch (e) {}
+
     // 3) Ẩn overlay/banner QC + cho video full khung
     var css = document.createElement('style');
     css.innerHTML = [
