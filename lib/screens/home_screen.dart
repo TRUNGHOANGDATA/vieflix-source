@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../models/movie.dart';
 import '../state/providers.dart';
 import '../widgets/movie_row.dart';
-import '../widgets/movie_card.dart';
 import '../widgets/paginated_movie_row.dart';
+import '../widgets/tv_focusable.dart';
 import '../theme/app_theme.dart';
 import '../data/local_store.dart';
 import 'detail_screen.dart';
@@ -48,17 +47,20 @@ class ContinueCard extends ConsumerWidget {
   }
 
   Widget _card(BuildContext context, WidgetRef ref, String img, String name, String sub, String slug, String openName) {
-    final preview = Movie(
-      name: openName, slug: slug, originalName: '', thumbUrl: img, posterUrl: img,
-      description: '', quality: '', language: '', currentEpisode: '', totalEpisodes: 0,
-    );
-    return HoverPreview(
-      movie: preview,
-      onOpen: () => onOpen(slug, openName),
-      builder: (_) => Container(
+    // Hàng "Xem tiếp": KHÔNG hiện ô preview lớn (bấm là xem luôn), chỉ sáng
+    // viền khi được chọn để dùng được bằng remote.
+    return FocusHighlight(
+      onPressed: () => onOpen(slug, openName),
+      scale: 1.04,
+      builder: (f) => Container(
         margin: const EdgeInsets.all(4),
-        child: ClipRRect(
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: f ? kRed : Colors.transparent, width: 3),
+          boxShadow: f ? [BoxShadow(color: kRed.withValues(alpha: 0.6), blurRadius: 16)] : null,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(6),
           child: Stack(fit: StackFit.expand, children: [
             if (img.isNotEmpty)
               CachedNetworkImage(imageUrl: img, fit: BoxFit.cover, errorWidget: (c, _, __) => Container(color: kSurface))

@@ -97,7 +97,21 @@ const String kAutoPlayScript = r'''
   }
   tryPlay();
   var n = 0;
-  var t = setInterval(function () { tryPlay(); if (++n > 25) clearInterval(t); }, 600);
+  var t = setInterval(function () {
+    tryPlay();
+    // Ghi trạng thái để chẩn đoán khi phim không tự chạy (xem log của app).
+    if (n === 3 || n === 12) {
+      try {
+        var v = document.querySelector('video');
+        var st = '';
+        try { st = (typeof window.jwplayer === 'function') ? window.jwplayer().getState() : 'nojw'; } catch (e) { st = 'jwerr'; }
+        console.log('VIEFLIX_DBG state=' + st + ' hasVideo=' + !!v +
+          ' paused=' + (v && v.paused) + ' t=' + (v ? v.currentTime.toFixed(1) : '-') +
+          ' rs=' + (v && v.readyState) + ' frames=' + document.querySelectorAll('iframe').length);
+      } catch (e) {}
+    }
+    if (++n > 25) clearInterval(t);
+  }, 600);
 })();
 ''';
 
@@ -134,9 +148,25 @@ const String kAntiAdUserScript = r'''
                       delete cfg.advertising;
                       delete cfg.ads;
                       if (cfg.plugins) { try { delete cfg.plugins.vast; delete cfg.plugins.googima; } catch (e) {} }
+                      // TỰ PHÁT: nguồn phim đặt autostart:false -> player nằm im và
+                      // hiện nút play. Ép bật ngay lúc khởi tạo (gọi play() sau khi
+                      // player đã dựng KHÔNG có tác dụng).
+                      cfg.autostart = true;
+                      cfg.mute = false;
                     }
                   } catch (e) {}
-                  return origSetup(cfg);
+                  var r = origSetup(cfg);
+                  // Khi player sẵn sàng thì phát luôn (lớp dự phòng cho autostart).
+                  try {
+                    if (r && typeof r.on === 'function') {
+                      r.on('ready', function () { try { r.play(true); } catch (e) {} });
+                      r.on('pause', function () {
+                        // Nguồn đôi khi pause ngay sau ready -> đẩy chạy lại 1 lần.
+                        if (!r.__resumedOnce) { r.__resumedOnce = 1; setTimeout(function () { try { r.play(true); } catch (e) {} }, 300); }
+                      });
+                    }
+                  } catch (e) {}
+                  return r;
                 };
               }
             } catch (e) {}

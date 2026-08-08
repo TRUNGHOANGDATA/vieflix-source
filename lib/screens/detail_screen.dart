@@ -146,7 +146,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
               Row(children: [
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(backgroundColor: kRed, padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 16)),
-                  onPressed: hasServer ? () => _play(d, servers[srv], eps, eps.first) : null,
+                  onPressed: hasServer ? () => _playSmart(d, servers[srv], eps) : null,
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Xem ngay', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
@@ -287,6 +287,42 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         server: s.serverName, episodeSlug: ep.slug, episodeName: ep.name);
     // Báo trang chủ cập nhật lại hàng "Xem tiếp" ngay
     ref.read(homeRefreshProvider.notifier).state++;
+  }
+
+  /// Bấm "Xem ngay": nếu phim đang xem dở thì HỎI xem tiếp tập cũ hay xem từ đầu.
+  /// Nút "Xem tiếp" được chọn sẵn -> trên TV chỉ cần bấm OK.
+  Future<void> _playSmart(MovieDetail d, ServerGroup s, List<Episode> eps) async {
+    if (eps.isEmpty) return;
+    final p = ref.read(storeProvider).progressFor(d.slug);
+    final idx = p == null ? -1 : eps.indexWhere((e) => e.slug == p.episodeSlug);
+    // Không có tiến độ, hoặc đang dở chính tập đầu -> xem luôn từ đầu.
+    if (idx <= 0) {
+      _play(d, s, eps, eps.first);
+      return;
+    }
+
+    final resume = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kSurface,
+        title: const Text('Bạn đang xem dở phim này', style: TextStyle(color: Colors.white)),
+        content: Text('Xem tiếp ${_epLabel(eps[idx].name)} hay xem lại từ đầu?',
+            style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Xem từ đầu', style: TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton(
+            autofocus: true, // remote: bấm OK là xem tiếp
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Xem tiếp ${_epLabel(eps[idx].name)}'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || resume == null) return; // thoát hộp thoại -> không làm gì
+    _play(d, s, eps, resume ? eps[idx] : eps.first);
   }
 
   void _play(MovieDetail d, ServerGroup s, List<Episode> eps, Episode ep) {

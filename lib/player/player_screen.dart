@@ -1,9 +1,11 @@
 import 'dart:collection';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, File, FileMode;
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import '../main.dart' show webViewEnvironment;
 import '../models/episode.dart';
 import '../theme/app_theme.dart';
 import 'ad_blocker.dart';
@@ -127,6 +129,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
           Expanded(
             child: InAppWebView(
+              // Windows: môi trường WebView2 đã mở khóa autoplay (main.dart).
+              webViewEnvironment: webViewEnvironment,
               initialUrlRequest: URLRequest(url: WebUri(_url)),
               initialSettings: InAppWebViewSettings(
                 contentBlockers: adContentBlockers(),
@@ -146,7 +150,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
               ),
               initialUserScripts: UnmodifiableListView([
-                UserScript(source: kAntiAdUserScript, injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START),
+                UserScript(
+                  source: kAntiAdUserScript,
+                  injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+                  forMainFrameOnly: false,
+                ),
+                // Tự phát: tiêm vào CẢ các iframe (player thường nằm trong iframe
+                // khác miền -> JS ở trang ngoài không với tới được).
+                UserScript(
+                  source: kAutoPlayScript,
+                  injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
+                  forMainFrameOnly: false,
+                ),
               ]),
               onWebViewCreated: (c) => _c = c,
               shouldOverrideUrlLoading: (c, action) async {
@@ -155,6 +170,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 return NavigationActionPolicy.ALLOW;
               },
               onCreateWindow: (c, req) async => false,
+              // Ghi dòng chẩn đoán VIEFLIX_DBG ra file để soi khi phim không tự chạy.
+              onConsoleMessage: (c, msg) async {
+                final m = msg.message;
+                if (!m.startsWith('VIEFLIX_DBG')) return;
+                try {
+                  final dir = await getApplicationSupportDirectory();
+                  final f = File('${dir.path}${Platform.pathSeparator}player-debug.log');
+                  await f.writeAsString('$m\n', mode: FileMode.append);
+                } catch (_) {}
+              },
               // Sau khi trang tải xong: tự động phát (remote khó "bấm" nút play trong web).
               onLoadStop: (c, url) async {
                 try { await c.evaluateJavascript(source: kAutoPlayScript); } catch (_) {}
