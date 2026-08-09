@@ -140,7 +140,7 @@ class ContinueCard extends ConsumerWidget {
               ),
             // Tên + tập (chữ trắng hết)
             Positioned(
-              left: 8, right: 8, bottom: 8,
+              left: 8, right: 8, bottom: 10,
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(name, maxLines: 2, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
@@ -149,6 +149,17 @@ class ContinueCard extends ConsumerWidget {
                     style: const TextStyle(color: Colors.white, fontSize: 12)),
               ]),
             ),
+            // Thanh tiến độ đã xem trong tập (nếu có ghi vị trí)
+            if (progress.durationSeconds > 0 && progress.positionSeconds > 0)
+              Positioned(
+                left: 0, right: 0, bottom: 0,
+                child: LinearProgressIndicator(
+                  value: (progress.positionSeconds / progress.durationSeconds).clamp(0.0, 1.0),
+                  minHeight: 3,
+                  backgroundColor: Colors.white24,
+                  color: kRed,
+                ),
+              ),
           ]),
         ),
       ),

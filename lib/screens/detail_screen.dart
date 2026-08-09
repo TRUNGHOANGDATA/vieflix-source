@@ -328,10 +328,12 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
       ),
     );
     if (!mounted || resume == null) return; // thoát hộp thoại -> không làm gì
-    _play(d, s, eps, resume ? eps[idx] : eps.first);
+    // Xem tiếp -> nhớ luôn chỗ đang dừng trong tập; xem từ đầu -> 0.
+    final startPos = resume ? (p?.positionSeconds ?? 0.0) : 0.0;
+    _play(d, s, eps, resume ? eps[idx] : eps.first, startPosition: startPos);
   }
 
-  void _play(MovieDetail d, ServerGroup s, List<Episode> eps, Episode ep) {
+  void _play(MovieDetail d, ServerGroup s, List<Episode> eps, Episode ep, {double startPosition = 0}) {
     final poster = d.thumbUrl.isNotEmpty ? d.thumbUrl : d.posterUrl;
     _saveAndRefresh(d, s, ep, poster);
     Navigator.of(context).push(MaterialPageRoute(
@@ -342,7 +344,9 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         episodes: eps,
         startIndex: eps.indexOf(ep),
         totalEpisodes: d.base.totalEpisodes > eps.length ? d.base.totalEpisodes : eps.length,
+        startPosition: startPosition,
         onEpisodeChange: (e) => _saveAndRefresh(d, s, e, poster),
+        onPosition: (pos, dur) => ref.read(storeProvider).savePosition(d.slug, pos, dur),
       ),
     ));
   }

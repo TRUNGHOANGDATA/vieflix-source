@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../data/update_checker.dart' show kAppVersion;
 import 'tv_focusable.dart';
 
 class NavItem {
@@ -62,6 +63,10 @@ class TopNav extends StatelessWidget {
         ),
         const SizedBox(width: 28),
         for (int i = 0; i < kNavItems.length; i++) _item(i),
+        const Spacer(),
+        // Phiên bản hiện tại — để mở app là biết đang chạy bản nào.
+        Text('v$kAppVersion',
+            style: const TextStyle(color: Colors.white38, fontSize: 13, fontWeight: FontWeight.w600)),
       ]),
     );
   }

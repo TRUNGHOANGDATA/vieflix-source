@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../state/providers.dart';
 import '../theme/app_theme.dart';
+import '../data/update_checker.dart';
+import '../data/update_flow.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -11,6 +13,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late final TextEditingController _ctrl;
+  bool _checking = false;
 
   @override
   void initState() {
@@ -22,6 +25,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void dispose() {
     _ctrl.dispose();
     super.dispose();
+  }
+
+  /// Bấm "Kiểm tra cập nhật": hỏi GitHub xem có bản mới hơn không.
+  Future<void> _checkUpdate() async {
+    setState(() => _checking = true);
+    final info = await UpdateChecker().check();
+    if (!mounted) return;
+    setState(() => _checking = false);
+    if (info == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        backgroundColor: kRed,
+        content: Text('Bạn đang dùng bản mới nhất rồi ✓'),
+      ));
+      return;
+    }
+    // Có bản mới -> hỏi cập nhật ngay.
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: kSurface,
+        title: Text('Đã có bản mới v${info.version}', style: const TextStyle(color: Colors.white)),
+        content: Text(
+          canAutoInstall(info)
+              ? 'Cập nhật ngay để dùng bản mới nhất? App sẽ tự tải và cài.'
+              : 'Mở trang tải bản mới?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Để sau')),
+          ElevatedButton(
+            autofocus: true,
+            style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(c, true),
+            child: Text(canAutoInstall(info) ? 'Cập nhật ngay' : 'Tải về'),
+          ),
+        ],
+      ),
+    );
+    if (go == true && mounted) startUpdateFlow(context, info);
   }
 
   Future<void> _save() async {
@@ -43,6 +85,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return ListView(padding: const EdgeInsets.all(24), children: [
       const Text('Cài đặt', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
       const SizedBox(height: 20),
+      // --- Phiên bản & cập nhật ---
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: kSurface, borderRadius: BorderRadius.circular(8)),
+        child: Row(children: [
+          const Icon(Icons.info_outline, color: Colors.white70, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Phiên bản ứng dụng',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 2),
+              Text('VieFlix v$kAppVersion', style: const TextStyle(color: Colors.white70)),
+            ]),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: Colors.white),
+            onPressed: _checking ? null : _checkUpdate,
+            icon: _checking
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.system_update),
+            label: Text(_checking ? 'Đang kiểm tra…' : 'Kiểm tra cập nhật'),
+          ),
+        ]),
+      ),
+      const SizedBox(height: 24),
       Row(children: [
         const Text('Đánh giá phim (TMDB)', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(width: 10),

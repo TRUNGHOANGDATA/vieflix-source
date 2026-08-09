@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io' show Platform, File, FileMode;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
@@ -18,12 +19,76 @@ String _epDisplay(String name) {
   return 'Tập $n';
 }
 
+/// Cầu nối điều khiển video, TIÊM VÀO MỌI KHUNG (kể cả iframe khác miền — nơi
+/// trình phát thật sự nằm). Vì `evaluateJavascript` chỉ chạy ở khung ngoài cùng
+/// nên nút tạm dừng/tua trước đây "không ăn" khi player nằm trong iframe.
+///
+/// Cơ chế:
+/// - Nhận lệnh (toggle/play/pause/seek/seekto) qua postMessage rồi thao tác lên
+///   `<video>` hoặc JWPlayer NGAY TRONG khung đó; đồng thời chuyển lệnh xuống các
+///   iframe con -> lệnh lan tới đúng khung có video dù lồng nhiều lớp.
+/// - Mỗi khung có video sẽ gửi trạng thái (vị trí/thời lượng/đang phát/đã hết)
+///   NGƯỢC lên tới khung ngoài cùng, lưu ở `window.__vfState` để app đọc.
+const String kPlayerBridgeScript = r'''
+(function(){
+  if (window.__vfBridge) return; window.__vfBridge = 1;
+  function vid(){ return document.querySelector('video'); }
+  function jw(){ try { return (typeof jwplayer==='function') ? jwplayer() : null; } catch(e){ return null; } }
+  function act(cmd, delta){
+    try {
+      var v = vid();
+      if (cmd==='toggle'){
+        if (v){ if(v.paused) v.play(); else v.pause(); return; }
+        var p=jw(); if(p&&p.getState){ if(p.getState()==='playing') p.pause(); else p.play(true); }
+      } else if (cmd==='play'){
+        if (v){ v.play(); return; } var p2=jw(); if(p2&&p2.play) p2.play(true);
+      } else if (cmd==='pause'){
+        if (v){ v.pause(); return; } var p3=jw(); if(p3&&p3.pause) p3.pause();
+      } else if (cmd==='seek'){
+        if (v && isFinite(v.duration)){ v.currentTime=Math.max(0,Math.min(v.duration, v.currentTime+delta)); return; }
+        var p4=jw(); if(p4&&p4.getPosition){ p4.seek(Math.max(0, p4.getPosition()+delta)); }
+      } else if (cmd==='seekto'){
+        if (v && isFinite(v.duration)){ v.currentTime=Math.max(0,Math.min(v.duration, delta)); return; }
+        var p5=jw(); if(p5&&p5.seek){ p5.seek(delta); }
+      }
+    } catch(e){}
+  }
+  window.addEventListener('message', function(e){
+    var d=e.data; if(!d || typeof d!=='object') return;
+    if (d.__vf===1){
+      act(d.cmd, d.delta||0);
+      for (var i=0;i<window.frames.length;i++){ try{ window.frames[i].postMessage(d,'*'); }catch(err){} }
+    } else if (d.__vfState===1){
+      if (window.top===window){ window.__vfState=d.s; }
+      else { try{ window.parent.postMessage(d,'*'); }catch(err){} }
+    }
+  });
+  setInterval(function(){
+    var v=vid(); var s=null;
+    try {
+      if (v && isFinite(v.duration) && v.duration>0){
+        s={p:v.currentTime, d:v.duration, paused:v.paused?1:0, ended:v.ended?1:0};
+      } else {
+        var p=jw();
+        if (p&&p.getDuration){ var st=p.getState(); s={p:p.getPosition(), d:p.getDuration(), paused:(st==='playing')?0:1, ended:(st==='complete')?1:0}; }
+      }
+    } catch(e){}
+    if (s && s.d>0){
+      if (window.top===window){ window.__vfState=s; }
+      else { try{ window.parent.postMessage({__vfState:1, s:s}, '*'); }catch(err){} }
+    }
+  }, 1000);
+})();
+''';
+
 class PlayerScreen extends StatefulWidget {
   final String movieName, posterUrl, embedUrl;
   final List<Episode> episodes;
   final int startIndex;
   final int totalEpisodes; // tổng số tập full của phim (kể cả chưa ra)
+  final double startPosition; // giây: xem tiếp từ đâu (0 = từ đầu)
   final void Function(Episode) onEpisodeChange;
+  final void Function(double pos, double dur)? onPosition; // lưu vị trí đang xem
   const PlayerScreen({
     super.key,
     required this.movieName,
@@ -33,6 +98,8 @@ class PlayerScreen extends StatefulWidget {
     required this.startIndex,
     required this.totalEpisodes,
     required this.onEpisodeChange,
+    this.startPosition = 0,
+    this.onPosition,
   });
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -55,11 +122,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _nextT;
   bool _nextBlocked = false;  // người dùng đã bấm huỷ ở tập này
 
+  // Xem tiếp từ vị trí cũ + lưu vị trí đang xem.
+  double _resumeTo = 0;       // giây cần seek tới sau khi tải xong (0 = không)
+  bool _resumeApplied = false;
+  int _saveTick = 0;          // đếm nhịp để ~5s mới ghi vị trí xuống đĩa 1 lần
+
   @override
   void initState() {
     super.initState();
     _idx = widget.startIndex < 0 ? 0 : widget.startIndex;
     _url = widget.embedUrl;
+    _resumeTo = widget.startPosition;
+    _resumeApplied = widget.startPosition <= 0;
     // ESC (PC) / phím remote (TV)
     HardwareKeyboard.instance.addHandler(_onKey);
     // Cập nhật vị trí phát để vẽ thanh tiến trình.
@@ -69,53 +143,63 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
+    // Lưu nốt vị trí cuối cùng khi thoát trình phát.
+    if (_dur > 0 && _pos > 0) widget.onPosition?.call(_pos, _dur);
     _hideT?.cancel();
     _pollT?.cancel();
     _nextT?.cancel();
     super.dispose();
   }
 
-  // ------- Điều khiển video bằng JS (dùng được cả video HTML5 lẫn JWPlayer) -------
+  // ------- Điều khiển video qua cầu nối (chạy được cả khi player nằm trong iframe) -------
   Future<void> _js(String code) async {
     try { await _c?.evaluateJavascript(source: code); } catch (_) {}
   }
 
-  void _seek(double delta) {
-    _js('''(function(){var v=document.querySelector('video');
-      if(v&&isFinite(v.duration)){v.currentTime=Math.max(0,Math.min(v.duration,v.currentTime+($delta)));return;}
-      try{var p=jwplayer();p.seek(Math.max(0,p.getPosition()+($delta)));}catch(e){}})();''');
-    _bumpBar();
+  /// Gửi lệnh xuống mọi khung (khung chính + iframe con) qua postMessage.
+  void _cmd(String cmd, [double delta = 0]) {
+    _js('''(function(){var m={__vf:1,cmd:'$cmd',delta:$delta};
+      try{window.postMessage(m,'*');}catch(e){}
+      for(var i=0;i<window.frames.length;i++){try{window.frames[i].postMessage(m,'*');}catch(e){}}})();''');
   }
 
+  void _seek(double delta) { _cmd('seek', delta); _bumpBar(); }
+
   void _togglePlay() {
-    _js('''(function(){var v=document.querySelector('video');
-      if(v){if(v.paused){v.play();}else{v.pause();}return;}
-      try{var p=jwplayer();if(p.getState()==='playing'){p.pause();}else{p.play(true);}}catch(e){}})();''');
+    _cmd('toggle');
     setState(() => _paused = !_paused);
     _bumpBar();
   }
 
-  /// Đọc vị trí/thời lượng/trạng thái từ trang để vẽ thanh tiến trình.
+  /// Đọc vị trí/thời lượng/trạng thái từ `window.__vfState` (do cầu nối gom về).
   Future<void> _syncState() async {
     if (!mounted || _c == null) return;
     try {
-      final r = await _c!.evaluateJavascript(source: '''(function(){
-        var v=document.querySelector('video');
-        if(v&&isFinite(v.duration))return v.currentTime+'|'+v.duration+'|'+(v.paused?1:0)+'|'+(v.ended?1:0);
-        try{var p=jwplayer();var st=p.getState();
-          return p.getPosition()+'|'+p.getDuration()+'|'+(st==='playing'?0:1)+'|'+(st==='complete'?1:0);}catch(e){}
-        return '';
-      })();''');
-      final s = (r ?? '').toString();
-      if (s.isEmpty || !s.contains('|')) return;
-      final parts = s.split('|');
-      final pos = double.tryParse(parts[0]) ?? 0;
-      final dur = double.tryParse(parts[1]) ?? 0;
-      final paused = parts.length > 2 && parts[2].trim() == '1';
-      final ended = parts.length > 3 && parts[3].trim() == '1';
+      final r = await _c!.evaluateJavascript(source: 'JSON.stringify(window.__vfState||null)');
+      final raw = (r ?? '').toString();
+      if (raw.isEmpty || raw == 'null') return;
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      final pos = (m['p'] is num) ? (m['p'] as num).toDouble() : 0.0;
+      final dur = (m['d'] is num) ? (m['d'] as num).toDouble() : 0.0;
+      final paused = m['paused'] == 1;
+      final ended = m['ended'] == 1;
       if (mounted) setState(() { _pos = pos; _dur = dur; _paused = paused; });
-      // Hết tập: cờ ended của trình phát, hoặc chạy tới sát cuối (một số nguồn
-      // không bắn sự kiện ended).
+
+      // Xem tiếp: khi biết thời lượng thì seek tới vị trí cũ (bỏ qua nếu quá sát cuối).
+      if (!_resumeApplied && dur > 0) {
+        _resumeApplied = true;
+        if (_resumeTo > 5 && _resumeTo < dur - 15) {
+          _cmd('seekto', _resumeTo);
+        }
+      }
+
+      // Lưu vị trí đang xem xuống đĩa mỗi ~5 giây (để "Xem tiếp" nhớ chỗ dừng).
+      if (dur > 0 && pos > 0) {
+        _saveTick++;
+        if (_saveTick >= 5) { _saveTick = 0; widget.onPosition?.call(pos, dur); }
+      }
+
+      // Hết tập: cờ ended, hoặc chạy tới sát cuối (một số nguồn không bắn ended).
       final nearEnd = dur > 60 && pos > 0 && pos >= dur - 1.5;
       if (ended || nearEnd) _armAutoNext();
     } catch (_) {}
@@ -212,6 +296,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _nextT?.cancel();
     _nextT = null;
     _nextBlocked = false;
+    // Sang tập mới -> xem từ đầu, không seek theo vị trí cũ nữa.
+    _resumeTo = 0;
+    _resumeApplied = true;
+    _saveTick = 0;
     setState(() {
       _idx = i;
       _url = ep.embed;
@@ -399,6 +487,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 UserScript(
                   source: kAntiAdUserScript,
                   injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+                  forMainFrameOnly: false,
+                ),
+                // Cầu nối điều khiển: tiêm vào MỌI khung để nút tạm dừng/tua
+                // "với" được tới player nằm trong iframe.
+                UserScript(
+                  source: kPlayerBridgeScript,
+                  injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
                   forMainFrameOnly: false,
                 ),
                 // Tự phát: tiêm vào CẢ các iframe (player thường nằm trong iframe
