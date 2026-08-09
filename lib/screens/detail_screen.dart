@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import '../state/providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_view.dart';
 import '../widgets/movie_row.dart';
+import '../widgets/tv_focusable.dart';
 import '../player/player_screen.dart';
 import 'category_list_screen.dart';
 
@@ -175,7 +177,11 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
               if (d.director != null) Text('Đạo diễn: ${d.director}', style: const TextStyle(color: Colors.white70)),
               if (d.casts != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text('Diễn viên: ${d.casts}', style: const TextStyle(color: Colors.white70))),
               const SizedBox(height: 12),
-              Text(d.description, style: const TextStyle(color: Colors.white70, height: 1.5)),
+              // TV: mô tả dài phải cuộn được bằng remote (đoạn văn thường không
+              // "chọn" được bằng D-pad). PC vẫn hiện đầy đủ như cũ.
+              Platform.isAndroid
+                  ? TvScrollableText(text: d.description)
+                  : Text(d.description, style: const TextStyle(color: Colors.white70, height: 1.5)),
             ]),
           ),
         ]),

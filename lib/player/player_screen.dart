@@ -190,6 +190,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 child: CachedNetworkImage(
                   imageUrl: widget.posterUrl,
                   width: 40, height: 56, fit: BoxFit.cover,
+                  memCacheWidth: 120,
                   placeholder: (c, _) => Container(width: 40, height: 56, color: kSurface),
                   errorWidget: (c, _, __) => Container(width: 40, height: 56, color: kSurface, child: const Icon(Icons.movie, color: Colors.white24, size: 18)),
                 ),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -146,6 +147,15 @@ class MovieCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // TV (Android): KHÔNG dựng ô preview lớn — không có chuột để rê, mà lại
+    // tốn bộ nhớ/hiệu năng. Chỉ cần sáng viền khi remote chọn tới.
+    if (Platform.isAndroid) {
+      return FocusHighlight(
+        onPressed: onTap,
+        scale: 1.06,
+        builder: (f) => _card(f),
+      );
+    }
     return HoverPreview(
       movie: movie,
       onOpen: onTap,
@@ -180,6 +190,9 @@ class MovieCard extends StatelessWidget {
             child: Stack(fit: StackFit.expand, children: [
               CachedNetworkImage(
                 imageUrl: img, fit: BoxFit.cover,
+                // Giải mã ảnh vừa đúng cỡ thẻ -> nhẹ RAM/CPU, quan trọng trên TV box.
+                memCacheWidth: 400,
+                maxWidthDiskCache: 400,
                 placeholder: (c, _) => Container(color: kSurface),
                 errorWidget: (c, _, _) => Container(color: kSurface, child: const Icon(Icons.movie, color: Colors.white24)),
               ),

@@ -63,7 +63,7 @@ class ContinueCard extends ConsumerWidget {
           borderRadius: BorderRadius.circular(6),
           child: Stack(fit: StackFit.expand, children: [
             if (img.isNotEmpty)
-              CachedNetworkImage(imageUrl: img, fit: BoxFit.cover, errorWidget: (c, _, __) => Container(color: kSurface))
+              CachedNetworkImage(imageUrl: img, fit: BoxFit.cover, memCacheWidth: 400, maxWidthDiskCache: 400, errorWidget: (c, _, __) => Container(color: kSurface))
             else
               Container(color: kSurface, child: const Icon(Icons.movie, color: Colors.white24, size: 40)),
             // Lớp tối dưới đáy để chữ trắng luôn đọc rõ

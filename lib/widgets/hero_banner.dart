@@ -17,6 +17,7 @@ class HeroBanner extends StatelessWidget {
         CachedNetworkImage(
           imageUrl: movie.posterUrl.isNotEmpty ? movie.posterUrl : movie.thumbUrl,
           fit: BoxFit.cover,
+          memCacheWidth: 1280,
           errorWidget: (c, _, __) => Container(color: kSurface),
         ),
         Container(
