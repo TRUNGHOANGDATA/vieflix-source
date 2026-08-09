@@ -29,12 +29,12 @@ class RowMetrics {
 /// hơn để chừa chỗ cho nút mũi tên).
 RowMetrics rowMetricsFor(
   double viewport, {
-  double target = 175,
-  double gap = 12,
+  double target = 250, // card TO như RoPhim: màn rộng ~7 card/dòng, màn hẹp ~5
+  double gap = 14,
   double edgeLeft = 16,
   double edgeRight = 50,
-  double heightFactor = 1.5,
-  double extraHeight = 64, // chừa chỗ cho tên Việt + tên gốc + số tập dưới card
+  double heightFactor = 1.44,
+  double extraHeight = 66, // chừa chỗ cho tên Việt + tên gốc + số tập dưới card
 }) {
   final padLeft = (edgeLeft - gap / 2).clamp(0.0, double.infinity);
   final padRight = (edgeRight - gap / 2).clamp(0.0, double.infinity);

@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 
-const kBg = Color(0xFF0F1014);      // nền tối hơi ngả xanh đen (giống RoPhim)
-const kSurface = Color(0xFF1A1B22);
+const kBg = Color(0xFF191B24);      // nền xám xanh — ĐÚNG màu RoPhim
+const kSurface = Color(0xFF23252F);
 const kRed = Color(0xFFE50914);
 const kAmber = Color(0xFFF5C518);   // vàng IMDb / số thứ tự Top
 

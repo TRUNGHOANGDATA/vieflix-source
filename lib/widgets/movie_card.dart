@@ -193,7 +193,7 @@ class MovieCard extends StatelessWidget {
           curve: Curves.easeOut,
           margin: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(10),
             // Khung VÀNG GOLD khi chọn/hover + bóng đổ nổi khối (luôn có) + quầng vàng khi chọn.
             border: Border.all(color: hovering ? kAmber : Colors.white12, width: hovering ? 3 : 1),
             boxShadow: [
@@ -202,7 +202,7 @@ class MovieCard extends StatelessWidget {
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(9),
             child: Stack(fit: StackFit.expand, children: [
               CachedNetworkImage(
                 imageUrl: img, fit: BoxFit.cover,

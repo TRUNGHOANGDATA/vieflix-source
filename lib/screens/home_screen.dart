@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../state/providers.dart';
 import '../widgets/movie_row.dart';
 import '../widgets/paginated_movie_row.dart';
+import '../widgets/home_hero.dart';
 import '../widgets/top_ranked_row.dart';
 import '../widgets/tv_focusable.dart';
 import '../theme/app_theme.dart';
@@ -184,7 +185,8 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(homeRefreshProvider); // vẽ lại khi xoá mục Xem tiếp
     return ListView(padding: EdgeInsets.zero, children: [
-      const SizedBox(height: 12),
+      const HomeHero(),
+      const SizedBox(height: 8),
       const TopSeriesRow(),
       _continueRow(ref, context),
       _personalRow(ref, context),
@@ -227,7 +229,7 @@ class HomeScreen extends ConsumerWidget {
         // Chia vừa khít số thẻ nguyên -> thẻ cuối không chạm mép, không bị cắt.
         // TV cần cao thêm để chứa nút "Bỏ theo dõi" dưới mỗi thẻ.
         final m = rowMetricsFor(cons.maxWidth,
-            target: 170, gap: 8, heightFactor: 1.5,
+            target: 210, gap: 12, heightFactor: 1.5,
             extraHeight: Platform.isAndroid ? 44 : 10);
         return SizedBox(
           height: m.rowHeight,
