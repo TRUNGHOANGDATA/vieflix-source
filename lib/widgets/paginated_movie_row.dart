@@ -4,7 +4,7 @@ import '../models/movie.dart';
 import '../state/providers.dart';
 import '../theme/app_theme.dart';
 import 'movie_card.dart';
-import 'movie_row.dart' show ScrollArrow;
+import 'movie_row.dart' show ScrollArrow, SeeAllButton;
 import 'tv_focusable.dart';
 
 /// Hàng phim ngang TỰ TẢI THÊM khi cuộn sang phải (dùng lại browseProvider).
@@ -60,11 +60,7 @@ class _PaginatedMovieRowState extends ConsumerState<PaginatedMovieRow> {
                   style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
             ),
           ),
-          if (widget.onSeeMore != null)
-            TextButton(
-              onPressed: widget.onSeeMore,
-              child: const Text('Xem tất cả ›', style: TextStyle(color: kRed, fontSize: 14)),
-            ),
+          if (widget.onSeeMore != null) SeeAllButton(onPressed: widget.onSeeMore!),
         ]),
       ),
       SizedBox(

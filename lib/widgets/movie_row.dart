@@ -39,6 +39,29 @@ class ScrollArrow extends StatelessWidget {
   }
 }
 
+/// Nút "Xem tất cả" ở đầu hàng. Dùng FocusHighlight để remote TV chọn tới được
+/// (TextButton thường gần như không thấy viền chọn trên TV).
+class SeeAllButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  const SeeAllButton({super.key, required this.onPressed});
+  @override
+  Widget build(BuildContext context) => FocusHighlight(
+        onPressed: onPressed,
+        scale: 1.0,
+        builder: (f) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(
+            color: f ? kRed : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: f ? kRed : Colors.white24, width: 2),
+          ),
+          child: Text('Xem tất cả ›',
+              style: TextStyle(
+                  color: f ? Colors.white : kRed, fontSize: 14, fontWeight: FontWeight.w600)),
+        ),
+      );
+}
+
 class MovieRow extends StatefulWidget {
   final String title;
   final List<Movie> movies;
@@ -77,11 +100,7 @@ class _MovieRowState extends State<MovieRow> {
               child: Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
             ),
           ),
-          if (widget.onSeeMore != null)
-            TextButton(
-              onPressed: widget.onSeeMore,
-              child: const Text('Xem tất cả ›', style: TextStyle(color: kRed, fontSize: 14)),
-            ),
+          if (widget.onSeeMore != null) SeeAllButton(onPressed: widget.onSeeMore!),
         ]),
       ),
       SizedBox(

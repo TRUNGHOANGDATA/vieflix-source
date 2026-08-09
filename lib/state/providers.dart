@@ -47,11 +47,13 @@ final recommendedProvider = FutureProvider<List<(Movie, double)>>((ref) async {
     if (r != null) rated.add((m, r.rating));
   }));
   rated.sort((a, b) => b.$2.compareTo(a.$2));
-  return rated.take(12).toList();
+  // Trả về nhiều hơn số hiện ở trang chủ để trang "Xem tất cả" có đủ phim.
+  return rated.take(60).toList();
 });
 
 // --- Gợi ý cá nhân: dựa vào thể loại hay xem (Xem tiếp) + Yêu thích ---
-final personalRecProvider = FutureProvider<(String, List<Movie>)?>((ref) async {
+// Trả về (tên thể loại, slug thể loại, danh sách phim) — slug để mở "Xem tất cả".
+final personalRecProvider = FutureProvider<(String, String, List<Movie>)?>((ref) async {
   ref.watch(homeRefreshProvider); // tính lại khi xem/thích phim mới
   final store = ref.read(storeProvider);
   final api = ref.read(apiProvider);
@@ -90,7 +92,7 @@ final personalRecProvider = FutureProvider<(String, List<Movie>)?>((ref) async {
       .where((m) => !seen.contains(m.slug))
       .toList();
   if (list.isEmpty) return null;
-  return (nameOf[top.key] ?? top.key, list);
+  return (nameOf[top.key] ?? top.key, top.key, list);
 });
 
 // --- Home rows ---

@@ -49,6 +49,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   double _pos = 0, _dur = 0;  // vị trí / tổng thời lượng (giây)
   Timer? _hideT, _pollT;
 
+  // Hết tập -> đếm ngược rồi tự chuyển sang tập kế tiếp.
+  static const int _autoNextSeconds = 8;
+  int? _nextIn;               // số giây còn lại (null = không đếm)
+  Timer? _nextT;
+  bool _nextBlocked = false;  // người dùng đã bấm huỷ ở tập này
+
   @override
   void initState() {
     super.initState();
@@ -65,6 +71,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     HardwareKeyboard.instance.removeHandler(_onKey);
     _hideT?.cancel();
     _pollT?.cancel();
+    _nextT?.cancel();
     super.dispose();
   }
 
@@ -94,8 +101,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       final r = await _c!.evaluateJavascript(source: '''(function(){
         var v=document.querySelector('video');
-        if(v&&isFinite(v.duration))return v.currentTime+'|'+v.duration+'|'+(v.paused?1:0);
-        try{var p=jwplayer();return p.getPosition()+'|'+p.getDuration()+'|'+(p.getState()==='playing'?0:1);}catch(e){}
+        if(v&&isFinite(v.duration))return v.currentTime+'|'+v.duration+'|'+(v.paused?1:0)+'|'+(v.ended?1:0);
+        try{var p=jwplayer();var st=p.getState();
+          return p.getPosition()+'|'+p.getDuration()+'|'+(st==='playing'?0:1)+'|'+(st==='complete'?1:0);}catch(e){}
         return '';
       })();''');
       final s = (r ?? '').toString();
@@ -104,8 +112,38 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final pos = double.tryParse(parts[0]) ?? 0;
       final dur = double.tryParse(parts[1]) ?? 0;
       final paused = parts.length > 2 && parts[2].trim() == '1';
+      final ended = parts.length > 3 && parts[3].trim() == '1';
       if (mounted) setState(() { _pos = pos; _dur = dur; _paused = paused; });
+      // Hết tập: cờ ended của trình phát, hoặc chạy tới sát cuối (một số nguồn
+      // không bắn sự kiện ended).
+      final nearEnd = dur > 60 && pos > 0 && pos >= dur - 1.5;
+      if (ended || nearEnd) _armAutoNext();
     } catch (_) {}
+  }
+
+  /// Bắt đầu đếm ngược chuyển tập (chỉ khi còn tập sau và chưa bị huỷ).
+  void _armAutoNext() {
+    if (_nextT != null || _nextBlocked) return;
+    if (_idx + 1 >= widget.episodes.length) return; // đang ở tập cuối
+    setState(() => _nextIn = _autoNextSeconds);
+    _nextT = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) { t.cancel(); return; }
+      final left = (_nextIn ?? 1) - 1;
+      if (left <= 0) {
+        _stopAutoNext();
+        _goto(_idx + 1);
+      } else {
+        setState(() => _nextIn = left);
+      }
+    });
+  }
+
+  /// Dừng đếm ngược. [block] = người dùng huỷ -> không đếm lại ở tập này nữa.
+  void _stopAutoNext({bool block = false}) {
+    _nextT?.cancel();
+    _nextT = null;
+    if (block) _nextBlocked = true;
+    if (mounted) setState(() => _nextIn = null);
   }
 
   /// Hiện thanh điều khiển rồi tự ẩn sau 3 giây.
@@ -121,6 +159,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _onKey(KeyEvent e) {
     if (e is! KeyDownEvent) return false;
     final k = e.logicalKey;
+    // Đang đếm ngược chuyển tập: OK = xem ngay, ▼ = huỷ (ở lại tập này).
+    if (_nextIn != null) {
+      if (k == LogicalKeyboardKey.select || k == LogicalKeyboardKey.enter ||
+          k == LogicalKeyboardKey.numpadEnter || k == LogicalKeyboardKey.space ||
+          k == LogicalKeyboardKey.gameButtonA) {
+        _stopAutoNext();
+        _goto(_idx + 1);
+        return true;
+      }
+      if (k == LogicalKeyboardKey.arrowDown) { _stopAutoNext(block: true); return true; }
+    }
     if (k == LogicalKeyboardKey.escape) {
       if (mounted && Navigator.canPop(context)) {
         Navigator.pop(context);
@@ -159,9 +208,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _goto(int i) {
     if (i < 0 || i >= widget.episodes.length) return;
     final ep = widget.episodes[i];
+    // Sang tập mới -> xoá mọi trạng thái "hết tập" của tập cũ.
+    _nextT?.cancel();
+    _nextT = null;
+    _nextBlocked = false;
     setState(() {
       _idx = i;
       _url = ep.embed;
+      _nextIn = null;
+      _pos = 0;
+      _dur = 0;
     });
     widget.onEpisodeChange(ep);
     _c?.loadUrl(urlRequest: URLRequest(url: WebUri(ep.embed)));
@@ -226,6 +282,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   left: 0, right: 0, bottom: 0,
                   child: _controlBar(),
                 ),
+              // Hết tập -> hộp đếm ngược sang tập kế tiếp
+              if (_nextIn != null)
+                Positioned(right: 24, bottom: 24, child: _nextEpisodeBox()),
             ]),
           ),
           // Thanh dưới: chuyển tập
@@ -241,6 +300,48 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
         ]),
       ),
+    );
+  }
+
+  /// Hộp "Tập tiếp theo" khi phim/tập vừa hết: đếm ngược rồi tự chuyển.
+  /// Bấm chuột được (PC) và bấm OK trên remote được (TV).
+  Widget _nextEpisodeBox() {
+    final next = _idx + 1 < widget.episodes.length ? widget.episodes[_idx + 1] : null;
+    if (next == null) return const SizedBox.shrink();
+    return Container(
+      width: 340,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: kRed, width: 2),
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Tập tiếp theo', style: TextStyle(color: Colors.white60, fontSize: 13)),
+        const SizedBox(height: 4),
+        Text(_epDisplay(next.name),
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: Colors.white),
+              onPressed: () { _stopAutoNext(); _goto(_idx + 1); },
+              icon: const Icon(Icons.play_arrow, size: 20),
+              label: Text('Xem ngay (${_nextIn}s)'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: () => _stopAutoNext(block: true),
+            child: const Text('Huỷ', style: TextStyle(color: Colors.white70)),
+          ),
+        ]),
+        const SizedBox(height: 4),
+        const Text('OK: xem ngay   •   ▼: huỷ',
+            style: TextStyle(color: Colors.white38, fontSize: 12)),
+      ]),
     );
   }
 

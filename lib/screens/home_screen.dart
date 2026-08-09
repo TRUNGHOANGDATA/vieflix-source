@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -9,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../data/local_store.dart';
 import 'detail_screen.dart';
 import 'category_list_screen.dart';
+import 'movie_grid_screen.dart';
 
 // Tên tập hiển thị: tránh "Tập Tập 08" khi nguồn (KKPhim) đã có sẵn chữ "Tập"
 String _epText(String name) {
@@ -46,10 +48,58 @@ class ContinueCard extends ConsumerWidget {
     ref.read(homeRefreshProvider.notifier).state++; // buộc trang chủ vẽ lại
   }
 
+  /// Bản TV: hỏi lại trước khi bỏ (remote dễ bấm nhầm).
+  Future<void> _confirmRemove(BuildContext context, WidgetRef ref, String name) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: kSurface,
+        title: const Text('Bỏ theo dõi?', style: TextStyle(color: Colors.white)),
+        content: Text('Xoá "$name" khỏi hàng Xem tiếp.\nPhim vẫn còn trong danh mục, bạn xem lại lúc nào cũng được.',
+            style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Giữ lại')),
+          ElevatedButton(
+            autofocus: true,
+            style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Bỏ theo dõi'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await _remove(ref);
+  }
+
+  /// Nút "Bỏ theo dõi" nằm NGAY DƯỚI thẻ phim: trên TV chỉ cần bấm ▼ từ thẻ là
+  /// tới nút này rồi bấm OK (remote không bấm được dấu ✕ nhỏ ở góc).
+  Widget _removeButton(BuildContext context, WidgetRef ref, String name) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+        child: FocusHighlight(
+          scale: 1.0,
+          onPressed: () => _confirmRemove(context, ref, name),
+          builder: (f) => Container(
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: f ? kRed : Colors.white12,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: f ? kRed : Colors.white24, width: 2),
+            ),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.close, size: 15, color: f ? Colors.white : Colors.white70),
+              const SizedBox(width: 4),
+              Text('Bỏ theo dõi',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: f ? Colors.white : Colors.white70)),
+            ]),
+          ),
+        ),
+      );
+
   Widget _card(BuildContext context, WidgetRef ref, String img, String name, String sub, String slug, String openName) {
     // Hàng "Xem tiếp": KHÔNG hiện ô preview lớn (bấm là xem luôn), chỉ sáng
     // viền khi được chọn để dùng được bằng remote.
-    return FocusHighlight(
+    final card = FocusHighlight(
       onPressed: () => onOpen(slug, openName),
       scale: 1.04,
       builder: (f) => Container(
@@ -74,18 +124,20 @@ class ContinueCard extends ConsumerWidget {
               ),
             ),
             const Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 42)),
-            // Nút xóa khỏi Xem tiếp
-            Positioned(
-              top: 4, right: 4,
-              child: GestureDetector(
-                onTap: () => _remove(ref),
-                child: Container(
-                  decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                  padding: const EdgeInsets.all(4),
-                  child: const Icon(Icons.close, color: Colors.white, size: 16),
+            // Nút ✕ ở góc: chỉ dành cho chuột (bản PC). Trên TV dùng nút
+            // "Bỏ theo dõi" ở dưới thẻ vì remote không trỏ được vào đây.
+            if (!Platform.isAndroid)
+              Positioned(
+                top: 4, right: 4,
+                child: GestureDetector(
+                  onTap: () => _remove(ref),
+                  child: Container(
+                    decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                    padding: const EdgeInsets.all(4),
+                    child: const Icon(Icons.close, color: Colors.white, size: 16),
+                  ),
                 ),
               ),
-            ),
             // Tên + tập (chữ trắng hết)
             Positioned(
               left: 8, right: 8, bottom: 8,
@@ -101,6 +153,12 @@ class ContinueCard extends ConsumerWidget {
         ),
       ),
     );
+    if (!Platform.isAndroid) return card;
+    // TV: thẻ phim + nút "Bỏ theo dõi" ngay dưới -> bấm ▼ là tới, OK là xoá.
+    return Column(children: [
+      Expanded(child: card),
+      _removeButton(context, ref, name),
+    ]);
   }
 }
 
@@ -153,7 +211,8 @@ class HomeScreen extends ConsumerWidget {
         child: Text('Xem tiếp', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
       ),
       SizedBox(
-        height: 250,
+        // TV cao hơn để chứa nút "Bỏ theo dõi" dưới mỗi thẻ
+        height: Platform.isAndroid ? 284 : 250,
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -180,8 +239,10 @@ class HomeScreen extends ConsumerWidget {
           ? const SizedBox.shrink()
           : MovieRow(
               title: '🎯 Vì bạn hay xem ${res.$1}',
-              movies: res.$2,
+              movies: res.$3,
               onTap: (m) => _open(c, m.slug, m.name),
+              // Xem tất cả -> mở đúng thể loại đang được gợi ý
+              onSeeMore: () => _seeMore(c, 'Phim ${res.$1}', BrowseQuery('genre', res.$2)),
             ),
       orElse: () => const SizedBox.shrink(),
     );
@@ -190,13 +251,18 @@ class HomeScreen extends ConsumerWidget {
   Widget _recommendedRow(WidgetRef ref, BuildContext c) {
     final rec = ref.watch(recommendedProvider);
     return rec.maybeWhen(
-      data: (list) => list.isEmpty
-          ? const SizedBox.shrink()
-          : MovieRow(
-              title: '⭐ Phim đề cử (điểm cao)',
-              movies: list.map((e) => e.$1).toList(),
-              onTap: (m) => _open(c, m.slug, m.name),
-            ),
+      data: (list) {
+        if (list.isEmpty) return const SizedBox.shrink();
+        final all = list.map((e) => e.$1).toList();
+        return MovieRow(
+          title: '⭐ Phim đề cử (điểm cao)',
+          movies: all.take(12).toList(),
+          onTap: (m) => _open(c, m.slug, m.name),
+          // Danh sách này do app tự chấm điểm -> mở trang lưới danh sách có sẵn
+          onSeeMore: () => Navigator.of(c).push(MaterialPageRoute(
+              builder: (_) => MovieGridScreen(title: 'Phim đề cử (điểm cao)', movies: all))),
+        );
+      },
       orElse: () => const SizedBox.shrink(),
     );
   }
