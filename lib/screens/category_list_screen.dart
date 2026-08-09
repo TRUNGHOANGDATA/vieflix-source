@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../widgets/movie_card.dart';
 import '../widgets/filter_bar.dart';
 import '../widgets/async_view.dart';
+import '../widgets/shimmer.dart';
 import 'detail_screen.dart';
 
 /// Trang danh sách đầy đủ: có ô tìm tên + bộ lọc + cuộn vô tận.
@@ -153,6 +154,7 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
               ? AsyncView(
                   value: ref.watch(searchProvider(_keyword)),
                   onRetry: () => ref.invalidate(searchProvider(_keyword)),
+                  skeleton: const MovieGridSkeleton(),
                   builder: (list) {
                     final f = _applyLang(list);
                     return f.isEmpty
@@ -168,6 +170,7 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
 
   Widget _browseBody() {
     final st = ref.watch(browseProvider(_q));
+    if (st.items.isEmpty && st.loading) return const MovieGridSkeleton();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (st.page < st.totalPage && !st.loading && _scroll.hasClients &&

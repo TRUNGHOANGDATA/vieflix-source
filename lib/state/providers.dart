@@ -95,6 +95,17 @@ final personalRecProvider = FutureProvider<(String, String, List<Movie>)?>((ref)
   return (nameOf[top.key] ?? top.key, top.key, list);
 });
 
+// Phim nổi bật cho hero banner trang chủ: ưu tiên phim đề cử (đã khớp TMDB nên
+// nhiều khả năng có ảnh nền ngang đẹp); không có thì lấy phim mới cập nhật.
+final featuredMoviesProvider = FutureProvider<List<Movie>>((ref) async {
+  try {
+    final rec = await ref.watch(recommendedProvider.future);
+    if (rec.isNotEmpty) return rec.map((e) => e.$1).take(6).toList();
+  } catch (_) {}
+  final latest = await ref.read(apiProvider).latest(page: 1);
+  return latest.items.take(6).toList();
+});
+
 // --- Home rows ---
 final latestProvider =
     FutureProvider<Paginated<Movie>>((ref) => ref.read(apiProvider).latest());

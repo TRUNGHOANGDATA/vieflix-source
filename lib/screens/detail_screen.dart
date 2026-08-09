@@ -92,11 +92,13 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
   Widget build(BuildContext context) {
     final detail = ref.watch(detailProvider(widget.slug));
     return Scaffold(
+      extendBodyBehindAppBar: true, // để ảnh nền tràn lên sau thanh tiêu đề
       appBar: AppBar(
-        backgroundColor: kBg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: Colors.white,
-        title: Text(widget.title, style: const TextStyle(fontSize: 16)),
+        title: Text(widget.title,
+            style: const TextStyle(fontSize: 16, shadows: [Shadow(color: Colors.black, blurRadius: 8)])),
       ),
       body: AsyncView<MovieDetail>(
         value: detail,
@@ -106,6 +108,36 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     );
   }
 
+  /// Ảnh nền lớn cho phần đầu trang chi tiết (backdrop TMDB, không có thì dùng
+  /// poster/thumb), phủ các lớp mờ để chữ + poster nổi rõ và hoà vào nền trang.
+  Widget _detailBackdrop(MovieDetail d) {
+    final q = d.base.originalName.isNotEmpty ? d.base.originalName : d.name;
+    final backdrop = ref.watch(backdropProvider(q)).maybeWhen(data: (u) => u, orElse: () => null);
+    final bg = (backdrop != null && backdrop.isNotEmpty)
+        ? backdrop
+        : (d.thumbUrl.isNotEmpty ? d.thumbUrl : d.posterUrl);
+    return Stack(fit: StackFit.expand, children: [
+      CachedNetworkImage(
+        imageUrl: bg, fit: BoxFit.cover, alignment: Alignment.topCenter, memCacheWidth: 1280,
+        placeholder: (c, _) => Container(color: kSurface),
+        errorWidget: (c, _, __) => Container(color: kSurface),
+      ),
+      Container(color: Colors.black.withValues(alpha: 0.45)),
+      Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter,
+              colors: [kBg, Colors.transparent], stops: [0.05, 0.9]),
+        ),
+      ),
+      Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(begin: Alignment.centerLeft, end: Alignment.centerRight,
+              colors: [Colors.black87, Colors.transparent], stops: [0.0, 0.7]),
+        ),
+      ),
+    ]);
+  }
+
   Widget _content(MovieDetail d) {
     final store = ref.watch(storeProvider);
     final fav = store.isFavorite(d.slug);
@@ -113,10 +145,12 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     final hasServer = servers.isNotEmpty;
     final srv = hasServer ? _effServer(servers) : 0;
     final eps = hasServer ? _sorted(servers[srv].items) : <Episode>[];
-    return ListView(children: [
-      // Poster dọc bên trái + thông tin bên phải (ảnh gốc nguonc)
-      Padding(
-        padding: const EdgeInsets.fromLTRB(32, 24, 32, 8),
+    return ListView(padding: EdgeInsets.zero, children: [
+      // Header điện ảnh: ảnh nền lớn + lớp mờ, poster & thông tin nổi lên trên.
+      Stack(children: [
+        Positioned.fill(child: _detailBackdrop(d)),
+        Padding(
+        padding: EdgeInsets.fromLTRB(32, MediaQuery.of(context).padding.top + kToolbarHeight + 16, 32, 8),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
@@ -185,7 +219,8 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
             ]),
           ),
         ]),
-      ),
+        ),
+      ]),
       const SizedBox(height: 16),
       Padding(
         padding: const EdgeInsets.fromLTRB(32, 0, 32, 0),

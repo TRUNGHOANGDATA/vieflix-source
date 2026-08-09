@@ -5,6 +5,7 @@ import '../state/providers.dart';
 import '../theme/app_theme.dart';
 import 'movie_card.dart';
 import 'movie_row.dart' show ScrollArrow, RowHeader, SnapScrollPhysics, rowMetricsFor;
+import 'shimmer.dart';
 import 'tv_focusable.dart';
 
 /// Hàng phim ngang TỰ TẢI THÊM khi cuộn sang phải (dùng lại browseProvider).
@@ -47,7 +48,14 @@ class _PaginatedMovieRowState extends ConsumerState<PaginatedMovieRow> {
   @override
   Widget build(BuildContext context) {
     final st = ref.watch(browseProvider(widget.query));
-    if (st.items.isEmpty) return const SizedBox(height: 8); // đang tải trang đầu / rỗng
+    if (st.items.isEmpty) {
+      // Đang tải trang đầu -> hiện xương shimmer; nếu rỗng thật thì ẩn.
+      if (!st.loading) return const SizedBox(height: 8);
+      return LayoutBuilder(builder: (ctx, cons) {
+        final m = rowMetricsFor(cons.maxWidth);
+        return MovieRowSkeleton(cardWidth: m.cardWidth, rowHeight: m.rowHeight);
+      });
+    }
     final hasMore = st.page < st.totalPage;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       RowHeader(title: widget.title, onSeeMore: widget.onSeeMore, edgeRight: 50),

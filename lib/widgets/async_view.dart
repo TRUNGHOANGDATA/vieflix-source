@@ -6,13 +6,14 @@ class AsyncView<T> extends StatelessWidget {
   final AsyncValue<T> value;
   final Widget Function(T data) builder;
   final VoidCallback? onRetry;
-  const AsyncView({super.key, required this.value, required this.builder, this.onRetry});
+  final Widget? skeleton; // hiện khi đang tải (thay vòng xoay) nếu có
+  const AsyncView({super.key, required this.value, required this.builder, this.onRetry, this.skeleton});
 
   @override
   Widget build(BuildContext context) {
     return value.when(
       data: builder,
-      loading: () => const Center(child: CircularProgressIndicator(color: kRed)),
+      loading: () => skeleton ?? const Center(child: CircularProgressIndicator(color: kRed)),
       error: (e, _) => Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Icon(Icons.error_outline, color: Colors.white54, size: 48),
