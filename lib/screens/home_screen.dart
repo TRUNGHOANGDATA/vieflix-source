@@ -5,7 +5,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../state/providers.dart';
 import '../widgets/movie_row.dart';
 import '../widgets/paginated_movie_row.dart';
-import '../widgets/home_hero.dart';
 import '../widgets/top_ranked_row.dart';
 import '../widgets/tv_focusable.dart';
 import '../theme/app_theme.dart';
@@ -185,8 +184,7 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(homeRefreshProvider); // vẽ lại khi xoá mục Xem tiếp
     return ListView(padding: EdgeInsets.zero, children: [
-      const HomeHero(),
-      const SizedBox(height: 8),
+      const SizedBox(height: 12),
       const TopSeriesRow(),
       _continueRow(ref, context),
       _personalRow(ref, context),

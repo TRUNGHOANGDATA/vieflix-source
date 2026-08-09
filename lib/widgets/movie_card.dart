@@ -143,7 +143,8 @@ class MovieCard extends StatelessWidget {
   final Movie movie;
   final VoidCallback onTap;
   final double width;
-  const MovieCard({super.key, required this.movie, required this.onTap, this.width = 180});
+  final int? rank; // nếu có: hiện số thứ tự VÀNG cạnh tên (dùng cho hàng "Top ...")
+  const MovieCard({super.key, required this.movie, required this.onTap, this.width = 180, this.rank});
 
   @override
   Widget build(BuildContext context) {
@@ -192,9 +193,10 @@ class MovieCard extends StatelessWidget {
           margin: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: hovering ? kRed : Colors.white10, width: hovering ? 2 : 1),
+            // Khung VÀNG GOLD khi chọn/hover (giống mẫu) + quầng sáng nhẹ.
+            border: Border.all(color: hovering ? kAmber : Colors.white10, width: hovering ? 3 : 1),
             boxShadow: hovering
-                ? [BoxShadow(color: kRed.withValues(alpha: 0.5), blurRadius: 16, spreadRadius: 1)]
+                ? [BoxShadow(color: kAmber.withValues(alpha: 0.5), blurRadius: 18, spreadRadius: 1)]
                 : null,
           ),
           child: ClipRRect(
@@ -217,17 +219,44 @@ class MovieCard extends StatelessWidget {
       ),
       Padding(
         padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text(m.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: hovering ? kRed : Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-          if (m.originalName.isNotEmpty)
-            Text(m.originalName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white38, fontSize: 11)),
-          if (m.currentEpisode.isNotEmpty)
-            Text(episodeLabel(m), maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white54, fontSize: 11)),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+          if (rank != null) ...[
+            _rankNumber(rank!),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Text(m.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: hovering ? kAmber : Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+              if (m.originalName.isNotEmpty)
+                Text(m.originalName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white38, fontSize: 11)),
+              if (m.currentEpisode.isNotEmpty)
+                Text(episodeLabel(m), maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white54, fontSize: 11)),
+            ]),
+          ),
         ]),
       ),
+    ]);
+  }
+
+  // Số thứ tự VÀNG nghiêng, viền đen — đặt cạnh tên phim (dùng cho hàng Top).
+  Widget _rankNumber(int n) {
+    final s = '$n';
+    return Stack(children: [
+      Text(s,
+          style: TextStyle(
+            fontSize: 38, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, height: 1.0,
+            foreground: Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 3
+              ..color = Colors.black,
+          )),
+      Text(s,
+          style: const TextStyle(
+            fontSize: 38, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, height: 1.0, color: kAmber,
+          )),
     ]);
   }
 }
@@ -242,7 +271,9 @@ class MoviePreviewCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final q = movie.originalName.isNotEmpty ? movie.originalName : movie.name;
-    final img = movie.posterUrl.isNotEmpty ? movie.posterUrl : movie.thumbUrl;
+    // Dùng CÙNG ảnh với thẻ nhỏ (thumb ưu tiên) -> ảnh đã tải sẵn, hiện NGAY khi
+    // rê chuột, không phải chờ tải ảnh poster khác vài giây.
+    final img = movie.thumbUrl.isNotEmpty ? movie.thumbUrl : movie.posterUrl;
     final detail = ref.watch(detailProvider(movie.slug));
     final rating = ref.watch(tmdbRatingProvider(q));
     final store = ref.watch(storeProvider);
@@ -267,6 +298,7 @@ class MoviePreviewCard extends ConsumerWidget {
                       cursor: SystemMouseCursors.click,
                       child: Stack(children: [
                         CachedNetworkImage(imageUrl: img, width: width, height: 250, fit: BoxFit.cover,
+                            memCacheWidth: 500, maxWidthDiskCache: 500,
                             errorWidget: (c, _, _) => Container(width: width, height: 250, color: kSurface)),
                         Positioned.fill(
                           child: Container(decoration: const BoxDecoration(

@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/movie.dart';
 import '../state/providers.dart';
-import '../theme/app_theme.dart';
 import '../screens/detail_screen.dart';
 import '../screens/category_list_screen.dart';
 import 'movie_card.dart';
-import 'movie_row.dart' show ScrollArrow, RowHeader, SnapScrollPhysics;
+import 'movie_row.dart' show ScrollArrow, RowHeader, SnapScrollPhysics, rowMetricsFor;
 import 'shimmer.dart';
 
 /// Hàng "Top ... hôm nay": số thứ tự VÀNG cỡ lớn nằm bên trái mỗi poster
@@ -41,44 +40,26 @@ class _TopRankedRowState extends ConsumerState<TopRankedRow> {
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           RowHeader(title: widget.title, onSeeMore: widget.onSeeMore, edgeRight: 50),
           LayoutBuilder(builder: (ctx, cons) {
-            // Chia vừa khít MỘT SỐ NGUYÊN ô (số thứ tự + thẻ). Lề ngoài vùng cuộn
-            // -> thẻ cuối không bị cắt (không còn cảnh chỉ hiện mỗi số như "8").
-            const numW = 50.0, gap = 12.0, padLeft = 12.0, padRight = 40.0;
-            final avail = (cons.maxWidth - padLeft - padRight).clamp(200.0, double.infinity);
-            var n = (avail / (185 + numW)).round();
-            if (n < 2) n = 2;
-            final extent = avail / n;
-            final cardW = (extent - numW - gap).clamp(80.0, double.infinity);
-            final rowHeight = cardW * 1.5 + 64;
+            // Chia vừa khít như hàng thường; số thứ tự nằm TRONG thẻ (cạnh tên).
+            final m = rowMetricsFor(cons.maxWidth);
             return SizedBox(
-              height: rowHeight,
+              height: m.rowHeight,
               child: Stack(children: [
                 Padding(
-                  padding: const EdgeInsets.only(left: padLeft, right: padRight),
+                  padding: EdgeInsets.only(left: m.padLeft, right: m.padRight),
                   child: ListView.builder(
                     controller: _scroll,
                     scrollDirection: Axis.horizontal,
-                    physics: SnapScrollPhysics(itemExtent: extent),
-                    itemExtent: extent,
+                    physics: SnapScrollPhysics(itemExtent: m.extent),
+                    itemExtent: m.extent,
                     itemCount: list.length,
-                    itemBuilder: (c, i) => Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                      SizedBox(
-                        width: numW,
-                        child: Padding(
-                          padding: EdgeInsets.only(bottom: rowHeight * 0.30),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: _rankNumber(i + 1),
-                          ),
-                        ),
-                      ),
-                      Expanded(child: MovieCard(movie: list[i], width: cardW, onTap: () => _open(c, list[i]))),
-                    ]),
+                    itemBuilder: (c, i) => MovieCard(
+                      movie: list[i], width: m.cardWidth, rank: i + 1, onTap: () => _open(c, list[i]),
+                    ),
                   ),
                 ),
-                ScrollArrow(left: true, controller: _scroll, step: extent * n),
-                ScrollArrow(left: false, controller: _scroll, step: extent * n),
+                ScrollArrow(left: true, controller: _scroll, step: m.step),
+                ScrollArrow(left: false, controller: _scroll, step: m.step),
               ]),
             );
           }),
@@ -88,26 +69,6 @@ class _TopRankedRowState extends ConsumerState<TopRankedRow> {
     );
   }
 
-  // Số vàng cỡ lớn, có viền tối để nổi trên mọi nền.
-  Widget _rankNumber(int n) {
-    final s = '$n';
-    const size = 56.0;
-    return Stack(children: [
-      Text(s,
-          style: TextStyle(
-            fontSize: size, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, height: 1.0,
-            foreground: Paint()
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 4
-              ..color = Colors.black,
-          )),
-      Text(s,
-          style: const TextStyle(
-            fontSize: size, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, height: 1.0,
-            color: kAmber,
-          )),
-    ]);
-  }
 }
 
 /// Hàng Top phim bộ dùng sẵn cho trang chủ.
