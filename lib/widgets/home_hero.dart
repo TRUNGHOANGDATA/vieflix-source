@@ -129,71 +129,77 @@ class _HeroSlide extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final q = movie.originalName.isNotEmpty ? movie.originalName : movie.name;
-    // Ảnh nguonc chỉ có poster DỌC; ảnh ngang TMDB (nếu có) hay tối/cắt xấu.
-    // -> LUÔN: nền = ảnh làm mờ, + poster dọc SẮC NÉT bên phải (kiểu áp phích).
     final backdrop = ref.watch(backdropProvider(q)).maybeWhen(data: (u) => u, orElse: () => null);
     final poster = movie.posterUrl.isNotEmpty ? movie.posterUrl : movie.thumbUrl;
-    final bg = (backdrop != null && backdrop.isNotEmpty) ? backdrop : poster;
+    final hasWide = backdrop != null && backdrop.isNotEmpty; // có ảnh ngang TMDB?
     final rating = ref.watch(tmdbRatingProvider(q)).maybeWhen(data: (r) => r, orElse: () => null);
     final store = ref.watch(storeProvider);
     final fav = store.isFavorite(movie.slug);
 
-    // Poster dọc đặt bên TRÁI; chữ nằm bên PHẢI poster.
+    // Poster dọc chỉ dùng khi KHÔNG có ảnh ngang.
     const posterLeft = 56.0, posterTop = 24.0, posterBottom = 44.0;
     final posterW = ((height - posterTop - posterBottom) * 2 / 3).clamp(120.0, 320.0);
-    final textLeft = posterLeft + posterW + 40;
+    final contentLeft = hasWide ? 56.0 : posterLeft + posterW + 40;
 
     return Stack(fit: StackFit.expand, children: [
-      // Nền: ảnh làm MỜ MẠNH + tối -> luôn đẹp, không bao giờ bị cắt kỳ cục.
-      ImageFiltered(
-        imageFilter: ui.ImageFilter.blur(sigmaX: 26, sigmaY: 26),
-        child: CachedNetworkImage(
-          imageUrl: bg, fit: BoxFit.cover, memCacheWidth: 800,
+      if (hasWide) ...[
+        // Ảnh ngang TMDB phủ KÍN, sắc nét (kiểu Netflix).
+        CachedNetworkImage(
+          imageUrl: backdrop, fit: BoxFit.cover, alignment: Alignment.topCenter, memCacheWidth: 1280,
           placeholder: (c, _) => Container(color: kSurface),
           errorWidget: (c, _, __) => Container(color: kSurface),
         ),
-      ),
-      Container(color: Colors.black.withValues(alpha: 0.55)),
-      // Poster dọc SẮC NÉT bên TRÁI (kiểu tấm áp phích) — hợp ảnh nguonc.
-      Positioned(
-        left: posterLeft, top: posterTop, bottom: posterBottom,
-        child: AspectRatio(
-          aspectRatio: 2 / 3,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.6), blurRadius: 24, offset: const Offset(0, 8))],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: CachedNetworkImage(
-                imageUrl: poster, fit: BoxFit.cover, memCacheWidth: 500,
-                errorWidget: (c, _, __) => Container(color: kSurface),
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(begin: Alignment.centerLeft, end: Alignment.centerRight,
+                colors: [Colors.black, Colors.black54, Colors.transparent], stops: [0.0, 0.42, 0.85]),
+          ),
+        ),
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.center,
+                colors: [kBg, Colors.transparent], stops: [0.0, 0.85]),
+          ),
+        ),
+      ] else ...[
+        // Không có ảnh ngang: nền mờ từ poster + poster sắc nét bên trái.
+        ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+          child: CachedNetworkImage(
+            imageUrl: poster, fit: BoxFit.cover, memCacheWidth: 800,
+            placeholder: (c, _) => Container(color: kSurface),
+            errorWidget: (c, _, __) => Container(color: kSurface),
+          ),
+        ),
+        Container(color: Colors.black.withValues(alpha: 0.55)),
+        Positioned(
+          left: posterLeft, top: posterTop, bottom: posterBottom,
+          child: AspectRatio(
+            aspectRatio: 2 / 3,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.6), blurRadius: 24, offset: const Offset(0, 8))],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: CachedNetworkImage(
+                  imageUrl: poster, fit: BoxFit.cover, memCacheWidth: 500,
+                  errorWidget: (c, _, __) => Container(color: kSurface),
+                ),
               ),
             ),
           ),
         ),
-      ),
-      // Lớp tối nhẹ phía phải để chữ dễ đọc
-      Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.centerRight, end: Alignment.center,
-            colors: [Colors.black87, Colors.transparent],
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.center,
+                colors: [kBg, Colors.transparent]),
           ),
         ),
-      ),
-      // Mờ đáy -> hoà vào nền trang
-      Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.bottomCenter, end: Alignment.center,
-            colors: [kBg, Colors.transparent],
-          ),
-        ),
-      ),
+      ],
       Positioned(
-        left: textLeft, right: 56, bottom: 40,
+        left: contentLeft, right: 56, bottom: 40,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Text(movie.name,
               maxLines: 2, overflow: TextOverflow.ellipsis,
