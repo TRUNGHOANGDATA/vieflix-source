@@ -210,22 +210,30 @@ class HomeScreen extends ConsumerWidget {
         padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
         child: Text('Xem tiếp', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
       ),
-      SizedBox(
-        // TV cao hơn để chứa nút "Bỏ theo dõi" dưới mỗi thẻ
-        height: Platform.isAndroid ? 284 : 250,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          itemCount: cw.length,
-          itemBuilder: (c, i) => SizedBox(
-            width: 158,
-            child: ContinueCard(
-              progress: cw[i],
-              onOpen: (slug, name) => _open(context, slug, name),
+      LayoutBuilder(builder: (ctx, cons) {
+        // Chia vừa khít số thẻ nguyên -> thẻ cuối không chạm mép, không bị cắt.
+        // TV cần cao thêm để chứa nút "Bỏ theo dõi" dưới mỗi thẻ.
+        final m = rowMetricsFor(cons.maxWidth,
+            target: 170, gap: 8, heightFactor: 1.5,
+            extraHeight: Platform.isAndroid ? 44 : 10);
+        return SizedBox(
+          height: m.rowHeight,
+          // Lề nằm NGOÀI vùng cuộn -> thẻ thừa bị cắt hẳn, không lòi nửa ảnh.
+          child: Padding(
+            padding: EdgeInsets.only(left: m.padLeft, right: m.padRight),
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              physics: SnapScrollPhysics(itemExtent: m.extent),
+              itemExtent: m.extent,
+              itemCount: cw.length,
+              itemBuilder: (c, i) => ContinueCard(
+                progress: cw[i],
+                onOpen: (slug, name) => _open(context, slug, name),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      }),
     ]);
   }
 
