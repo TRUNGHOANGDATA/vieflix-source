@@ -138,6 +138,11 @@ class _HeroSlide extends ConsumerWidget {
     final store = ref.watch(storeProvider);
     final fav = store.isFavorite(movie.slug);
 
+    // Poster dọc đặt bên TRÁI; chữ nằm bên PHẢI poster.
+    const posterLeft = 56.0, posterTop = 24.0, posterBottom = 44.0;
+    final posterW = ((height - posterTop - posterBottom) * 2 / 3).clamp(120.0, 320.0);
+    final textLeft = posterLeft + posterW + 40;
+
     return Stack(fit: StackFit.expand, children: [
       // Nền: ảnh làm MỜ MẠNH + tối -> luôn đẹp, không bao giờ bị cắt kỳ cục.
       ImageFiltered(
@@ -148,10 +153,10 @@ class _HeroSlide extends ConsumerWidget {
           errorWidget: (c, _, __) => Container(color: kSurface),
         ),
       ),
-      Container(color: Colors.black.withValues(alpha: 0.5)),
-      // Poster dọc SẮC NÉT bên phải (kiểu tấm áp phích) — hợp ảnh nguonc.
+      Container(color: Colors.black.withValues(alpha: 0.55)),
+      // Poster dọc SẮC NÉT bên TRÁI (kiểu tấm áp phích) — hợp ảnh nguonc.
       Positioned(
-        right: 84, top: 26, bottom: 42,
+        left: posterLeft, top: posterTop, bottom: posterBottom,
         child: AspectRatio(
           aspectRatio: 2 / 3,
           child: Container(
@@ -169,13 +174,12 @@ class _HeroSlide extends ConsumerWidget {
           ),
         ),
       ),
-      // Mờ trái->phải để chữ dễ đọc
+      // Lớp tối nhẹ phía phải để chữ dễ đọc
       Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.centerLeft, end: Alignment.centerRight,
-            colors: [Colors.black, Colors.black54, Colors.transparent],
-            stops: [0.0, 0.45, 0.9],
+            begin: Alignment.centerRight, end: Alignment.center,
+            colors: [Colors.black87, Colors.transparent],
           ),
         ),
       ),
@@ -189,7 +193,7 @@ class _HeroSlide extends ConsumerWidget {
         ),
       ),
       Positioned(
-        left: 40, right: 360, bottom: 40,
+        left: textLeft, right: 56, bottom: 40,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Text(movie.name,
               maxLines: 2, overflow: TextOverflow.ellipsis,

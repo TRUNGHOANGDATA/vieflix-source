@@ -6,7 +6,7 @@ import '../theme/app_theme.dart';
 import '../screens/detail_screen.dart';
 import '../screens/category_list_screen.dart';
 import 'movie_card.dart';
-import 'movie_row.dart' show ScrollArrow, RowHeader, rowMetricsFor;
+import 'movie_row.dart' show ScrollArrow, RowHeader, SnapScrollPhysics;
 import 'shimmer.dart';
 
 /// Hàng "Top ... hôm nay": số thứ tự VÀNG cỡ lớn nằm bên trái mỗi poster
@@ -41,34 +41,44 @@ class _TopRankedRowState extends ConsumerState<TopRankedRow> {
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           RowHeader(title: widget.title, onSeeMore: widget.onSeeMore, edgeRight: 50),
           LayoutBuilder(builder: (ctx, cons) {
-            final m = rowMetricsFor(cons.maxWidth);
-            // Số thứ tự chiếm thêm chỗ bên trái mỗi thẻ.
-            const numW = 52.0;
-            final itemW = m.cardWidth + numW + 12;
+            // Chia vừa khít MỘT SỐ NGUYÊN ô (số thứ tự + thẻ). Lề ngoài vùng cuộn
+            // -> thẻ cuối không bị cắt (không còn cảnh chỉ hiện mỗi số như "8").
+            const numW = 50.0, gap = 12.0, padLeft = 12.0, padRight = 40.0;
+            final avail = (cons.maxWidth - padLeft - padRight).clamp(200.0, double.infinity);
+            var n = (avail / (185 + numW)).round();
+            if (n < 2) n = 2;
+            final extent = avail / n;
+            final cardW = (extent - numW - gap).clamp(80.0, double.infinity);
+            final rowHeight = cardW * 1.5 + 64;
             return SizedBox(
-              height: m.rowHeight,
+              height: rowHeight,
               child: Stack(children: [
-                ListView.builder(
-                  controller: _scroll,
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.only(left: 12, right: 40),
-                  itemCount: list.length,
-                  itemBuilder: (c, i) => SizedBox(
-                    width: itemW,
-                    child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: padLeft, right: padRight),
+                  child: ListView.builder(
+                    controller: _scroll,
+                    scrollDirection: Axis.horizontal,
+                    physics: SnapScrollPhysics(itemExtent: extent),
+                    itemExtent: extent,
+                    itemCount: list.length,
+                    itemBuilder: (c, i) => Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
                       SizedBox(
                         width: numW,
                         child: Padding(
-                          padding: EdgeInsets.only(bottom: m.rowHeight * 0.30),
-                          child: _rankNumber(i + 1),
+                          padding: EdgeInsets.only(bottom: rowHeight * 0.30),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: _rankNumber(i + 1),
+                          ),
                         ),
                       ),
-                      Expanded(child: MovieCard(movie: list[i], width: m.cardWidth, onTap: () => _open(c, list[i]))),
+                      Expanded(child: MovieCard(movie: list[i], width: cardW, onTap: () => _open(c, list[i]))),
                     ]),
                   ),
                 ),
-                ScrollArrow(left: true, controller: _scroll, step: itemW * 3),
-                ScrollArrow(left: false, controller: _scroll, step: itemW * 3),
+                ScrollArrow(left: true, controller: _scroll, step: extent * n),
+                ScrollArrow(left: false, controller: _scroll, step: extent * n),
               ]),
             );
           }),
