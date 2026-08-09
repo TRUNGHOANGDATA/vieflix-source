@@ -95,15 +95,35 @@ final personalRecProvider = FutureProvider<(String, String, List<Movie>)?>((ref)
   return (nameOf[top.key] ?? top.key, top.key, list);
 });
 
-// Phim nổi bật cho hero banner trang chủ: ưu tiên phim đề cử (đã khớp TMDB nên
-// nhiều khả năng có ảnh nền ngang đẹp); không có thì lấy phim mới cập nhật.
+// Phim nổi bật cho hero banner trang chủ. CHỈ giữ phim CÓ ảnh ngang (TMDB) để
+// mọi slide đồng nhất kiểu ảnh ngang (không lẫn poster dọc gây chỏi khi đổi).
 final featuredMoviesProvider = FutureProvider<List<Movie>>((ref) async {
+  final key = ref.watch(tmdbKeyProvider);
+  // Gom ứng viên: ưu tiên phim đề cử (đã khớp TMDB), không có thì phim mới.
+  List<Movie> pool = [];
   try {
     final rec = await ref.watch(recommendedProvider.future);
-    if (rec.isNotEmpty) return rec.map((e) => e.$1).take(6).toList();
+    pool = rec.map((e) => e.$1).toList();
   } catch (_) {}
-  final latest = await ref.read(apiProvider).latest(page: 1);
-  return latest.items.take(6).toList();
+  if (pool.isEmpty) {
+    final latest = await ref.read(apiProvider).latest(page: 1);
+    pool = latest.items;
+  }
+  if (key.isEmpty || pool.isEmpty) return pool.take(6).toList();
+
+  // Kiểm tra ảnh ngang song song, chỉ giữ phim có ảnh ngang.
+  final tmdb = TmdbApi(key);
+  final checks = await Future.wait(pool.take(14).map((m) async {
+    final q = m.originalName.isNotEmpty ? m.originalName : m.name;
+    try {
+      final b = await tmdb.backdrop(q);
+      return (m, b != null && b.isNotEmpty);
+    } catch (_) {
+      return (m, false);
+    }
+  }));
+  final withWide = checks.where((e) => e.$2).map((e) => e.$1).take(6).toList();
+  return withWide.isNotEmpty ? withWide : pool.take(6).toList();
 });
 
 // Top phim bộ "hôm nay" cho hàng xếp hạng ở đầu trang chủ.
