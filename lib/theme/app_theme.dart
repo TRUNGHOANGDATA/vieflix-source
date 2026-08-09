@@ -1,10 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 
-const kBg = Color(0xFF0B0B10);      // nền tối sâu (giống các trang phim hiện đại)
-const kSurface = Color(0xFF17171E);
+const kBg = Color(0xFF0F1014);      // nền tối hơi ngả xanh đen (giống RoPhim)
+const kSurface = Color(0xFF1A1B22);
 const kRed = Color(0xFFE50914);
-const kAmber = Color(0xFFF5C518);   // vàng IMDb
+const kAmber = Color(0xFFF5C518);   // vàng IMDb / số thứ tự Top
 
 final appTheme = ThemeData(
   brightness: Brightness.dark,

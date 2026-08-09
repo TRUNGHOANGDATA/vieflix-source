@@ -6,6 +6,7 @@ import '../state/providers.dart';
 import '../widgets/movie_row.dart';
 import '../widgets/paginated_movie_row.dart';
 import '../widgets/home_hero.dart';
+import '../widgets/top_ranked_row.dart';
 import '../widgets/tv_focusable.dart';
 import '../theme/app_theme.dart';
 import '../data/local_store.dart';
@@ -186,6 +187,7 @@ class HomeScreen extends ConsumerWidget {
     return ListView(padding: EdgeInsets.zero, children: [
       const HomeHero(),
       const SizedBox(height: 8),
+      const TopSeriesRow(),
       _continueRow(ref, context),
       _personalRow(ref, context),
       _recommendedRow(ref, context),

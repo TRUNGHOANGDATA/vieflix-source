@@ -106,6 +106,17 @@ final featuredMoviesProvider = FutureProvider<List<Movie>>((ref) async {
   return latest.items.take(6).toList();
 });
 
+// Top phim bộ "hôm nay" cho hàng xếp hạng ở đầu trang chủ.
+final topSeriesProvider = FutureProvider<List<Movie>>((ref) async {
+  try {
+    final r = await ref.read(apiProvider).listByType('phim-bo', page: 1);
+    if (r.items.isNotEmpty) return r.items.take(30).toList();
+  } catch (_) {}
+  // Dự phòng: nếu nguồn không có 'phim-bo' thì dùng phim mới cập nhật.
+  final l = await ref.read(apiProvider).latest(page: 1);
+  return l.items.take(30).toList();
+});
+
 // --- Home rows ---
 final latestProvider =
     FutureProvider<Paginated<Movie>>((ref) => ref.read(apiProvider).latest());

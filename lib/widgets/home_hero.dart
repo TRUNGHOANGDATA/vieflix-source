@@ -129,57 +129,53 @@ class _HeroSlide extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final q = movie.originalName.isNotEmpty ? movie.originalName : movie.name;
-    // Ảnh nền ngang chất lượng cao (TMDB). Ảnh nguonc chỉ có poster DỌC -> ép
-    // ngang sẽ xấu, nên khi không có ảnh ngang thì dùng poster dọc LÀM NỀN MỜ.
+    // Ảnh nguonc chỉ có poster DỌC; ảnh ngang TMDB (nếu có) hay tối/cắt xấu.
+    // -> LUÔN: nền = ảnh làm mờ, + poster dọc SẮC NÉT bên phải (kiểu áp phích).
     final backdrop = ref.watch(backdropProvider(q)).maybeWhen(data: (u) => u, orElse: () => null);
-    final hasWide = backdrop != null && backdrop.isNotEmpty;
     final poster = movie.posterUrl.isNotEmpty ? movie.posterUrl : movie.thumbUrl;
+    final bg = (backdrop != null && backdrop.isNotEmpty) ? backdrop : poster;
     final rating = ref.watch(tmdbRatingProvider(q)).maybeWhen(data: (r) => r, orElse: () => null);
     final store = ref.watch(storeProvider);
     final fav = store.isFavorite(movie.slug);
 
     return Stack(fit: StackFit.expand, children: [
-      if (hasWide)
-        CachedNetworkImage(
-          imageUrl: backdrop,
-          fit: BoxFit.cover,
-          alignment: Alignment.topCenter,
-          memCacheWidth: 1280,
+      // Nền: ảnh làm MỜ MẠNH + tối -> luôn đẹp, không bao giờ bị cắt kỳ cục.
+      ImageFiltered(
+        imageFilter: ui.ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+        child: CachedNetworkImage(
+          imageUrl: bg, fit: BoxFit.cover, memCacheWidth: 800,
           placeholder: (c, _) => Container(color: kSurface),
           errorWidget: (c, _, __) => Container(color: kSurface),
-        )
-      else ...[
-        // Nền: poster dọc phủ kín + làm mờ mạnh -> đẹp, không bị cắt kỳ cục.
-        ImageFiltered(
-          imageFilter: ui.ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-          child: CachedNetworkImage(
-            imageUrl: poster, fit: BoxFit.cover, memCacheWidth: 640,
-            placeholder: (c, _) => Container(color: kSurface),
-            errorWidget: (c, _, __) => Container(color: kSurface),
-          ),
         ),
-        // Poster dọc SẮC NÉT đặt bên phải (kiểu tấm áp phích)
-        Positioned(
-          right: 60, top: 20, bottom: 20,
-          child: AspectRatio(
-            aspectRatio: 2 / 3,
+      ),
+      Container(color: Colors.black.withValues(alpha: 0.5)),
+      // Poster dọc SẮC NÉT bên phải (kiểu tấm áp phích) — hợp ảnh nguonc.
+      Positioned(
+        right: 84, top: 26, bottom: 42,
+        child: AspectRatio(
+          aspectRatio: 2 / 3,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.6), blurRadius: 24, offset: const Offset(0, 8))],
+            ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               child: CachedNetworkImage(
-                imageUrl: poster, fit: BoxFit.cover, memCacheWidth: 400,
+                imageUrl: poster, fit: BoxFit.cover, memCacheWidth: 500,
                 errorWidget: (c, _, __) => Container(color: kSurface),
               ),
             ),
           ),
         ),
-      ],
+      ),
       // Mờ trái->phải để chữ dễ đọc
       Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.centerLeft, end: Alignment.centerRight,
             colors: [Colors.black, Colors.black54, Colors.transparent],
-            stops: [0.0, 0.4, 0.85],
+            stops: [0.0, 0.45, 0.9],
           ),
         ),
       ),
@@ -193,7 +189,7 @@ class _HeroSlide extends ConsumerWidget {
         ),
       ),
       Positioned(
-        left: 40, right: 200, bottom: 40,
+        left: 40, right: 360, bottom: 40,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Text(movie.name,
               maxLines: 2, overflow: TextOverflow.ellipsis,
