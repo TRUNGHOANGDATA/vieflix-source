@@ -163,79 +163,76 @@ class MovieCard extends StatelessWidget {
     );
   }
 
-  Widget _langTag(String s, Color c) => Container(
-        margin: const EdgeInsets.only(bottom: 3),
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-        decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(3)),
-        child: Text(s, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600)),
+  // Pill nhỏ gọn (chất lượng / loại tiếng) đặt trên poster
+  Widget _pill(String s, Color bg, {Color fg = Colors.white}) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(4)),
+        child: Text(s, style: TextStyle(color: fg, fontSize: 9, fontWeight: FontWeight.bold)),
       );
 
+  Widget _langBadge(Movie m) {
+    if (m.hasLongTieng) return _pill('LT', const Color(0xFF1565C0));
+    if (m.hasThuyetMinh) return _pill('TM', const Color(0xFF2E7D32));
+    if (m.hasPhuDe) return _pill('PĐ', Colors.black.withValues(alpha: 0.65));
+    return const SizedBox.shrink();
+  }
+
+  /// Card kiểu hiện đại: poster bo góc + badge nhỏ; TÊN PHIM (Việt + tên gốc)
+  /// nằm BÊN DƯỚI poster. Khi chọn/hover: phóng nhẹ + quầng đỏ + tên đổi màu đỏ.
   Widget _card(bool hovering) {
     final m = movie;
     final img = m.thumbUrl.isNotEmpty ? m.thumbUrl : m.posterUrl;
-    return Container(
-      width: width,
-      margin: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: hovering ? kRed : Colors.transparent, width: 3),
-        boxShadow: hovering
-            ? [BoxShadow(color: kRed.withValues(alpha: 0.6), blurRadius: 16, spreadRadius: 1)]
-            : null,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Expanded(
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: hovering ? kRed : Colors.white10, width: hovering ? 2 : 1),
+            boxShadow: hovering
+                ? [BoxShadow(color: kRed.withValues(alpha: 0.5), blurRadius: 18, spreadRadius: 1)]
+                : null,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(9),
             child: Stack(fit: StackFit.expand, children: [
               CachedNetworkImage(
                 imageUrl: img, fit: BoxFit.cover,
-                // Giải mã ảnh vừa đúng cỡ thẻ -> nhẹ RAM/CPU, quan trọng trên TV box.
-                memCacheWidth: 400,
-                maxWidthDiskCache: 400,
+                memCacheWidth: 400, maxWidthDiskCache: 400,
                 placeholder: (c, _) => Container(color: kSurface),
                 errorWidget: (c, _, _) => Container(color: kSurface, child: const Icon(Icons.movie, color: Colors.white24)),
               ),
-              if (m.quality.isNotEmpty)
-                Positioned(
-                  top: 4, left: 4,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: kRed, borderRadius: BorderRadius.circular(4)),
-                    child: Text(m.quality, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              // Nhãn loại tiếng
-              Positioned(
-                top: 4, right: 4,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  if (m.hasLongTieng) _langTag('Lồng tiếng', const Color(0xFF1565C0)),
-                  if (m.hasThuyetMinh) _langTag('Thuyết minh', const Color(0xFF2E7D32)),
-                  if (!m.hasLongTieng && !m.hasThuyetMinh && m.hasPhuDe) _langTag('Phụ đề', Colors.black54),
-                ]),
-              ),
+              if (m.quality.isNotEmpty) Positioned(top: 6, left: 6, child: _pill(m.quality, kRed)),
+              Positioned(top: 6, right: 6, child: _langBadge(m)),
               if (m.currentEpisode.isNotEmpty)
                 Positioned(
-                  left: 4, right: 4, bottom: 4,
+                  left: 0, right: 0, bottom: 0,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.75), borderRadius: BorderRadius.circular(4)),
+                    padding: const EdgeInsets.fromLTRB(8, 16, 8, 6),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.center,
+                          colors: [Colors.black87, Colors.transparent]),
+                    ),
                     child: Text(episodeLabel(m), maxLines: 1, overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
                   ),
                 ),
             ]),
           ),
-          Container(
-            color: Colors.black,
-            padding: const EdgeInsets.all(6),
-            child: Text(m.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-          ),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Text(m.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: hovering ? kRed : Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+          if (m.originalName.isNotEmpty)
+            Text(m.originalName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white38, fontSize: 11)),
         ]),
       ),
-    );
+    ]);
   }
 }
 

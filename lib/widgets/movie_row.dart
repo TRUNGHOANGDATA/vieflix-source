@@ -33,8 +33,8 @@ RowMetrics rowMetricsFor(
   double gap = 12,
   double edgeLeft = 16,
   double edgeRight = 50,
-  double heightFactor = 1.45,
-  double extraHeight = 34,
+  double heightFactor = 1.5,
+  double extraHeight = 50, // chừa chỗ cho tên phim (Việt + gốc) nằm dưới card
 }) {
   final padLeft = (edgeLeft - gap / 2).clamp(0.0, double.infinity);
   final padRight = (edgeRight - gap / 2).clamp(0.0, double.infinity);

@@ -40,6 +40,27 @@ class _HomeHeroState extends ConsumerState<HomeHero> {
     });
   }
 
+  // Chuyển phim bằng mũi tên (đặt lại đồng hồ tự đổi để không giật).
+  void _go(int delta) {
+    if (!_pc.hasClients || _count == 0) return;
+    final next = (_page + delta + _count) % _count;
+    _pc.animateToPage(next, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut);
+    _armAuto();
+  }
+
+  Widget _arrow(bool right) => Material(
+        color: Colors.black.withValues(alpha: 0.45),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () => _go(right ? 1 : -1),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Icon(right ? Icons.chevron_right : Icons.chevron_left, color: Colors.white, size: 32),
+          ),
+        ),
+      );
+
   double _heroHeight(BuildContext c) {
     final w = MediaQuery.sizeOf(c).width;
     return (w * 0.42).clamp(320.0, 460.0);
@@ -65,23 +86,29 @@ class _HomeHeroState extends ConsumerState<HomeHero> {
               onPageChanged: (i) => setState(() => _page = i),
               itemBuilder: (c, i) => _HeroSlide(movie: movies[i], height: h),
             ),
-            // Chấm chỉ vị trí (trang nào đang hiện)
-            if (movies.length > 1)
+            // Mũi tên qua lại (bấm chuột được; trên TV vẫn tự đổi phim)
+            if (movies.length > 1) ...[
+              Positioned(left: 10, top: 0, bottom: 0, child: Center(child: _arrow(false))),
+              Positioned(right: 10, top: 0, bottom: 0, child: Center(child: _arrow(true))),
+              // Chấm chỉ vị trí (đặt giữa dưới)
               Positioned(
-                bottom: 18, right: 40,
-                child: Row(children: [
-                  for (int i = 0; i < movies.length; i++)
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      width: i == _page ? 22 : 8, height: 8,
-                      decoration: BoxDecoration(
-                        color: i == _page ? kRed : Colors.white38,
-                        borderRadius: BorderRadius.circular(4),
+                bottom: 14, left: 0, right: 0,
+                child: Center(
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    for (int i = 0; i < movies.length; i++)
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        width: i == _page ? 22 : 8, height: 8,
+                        decoration: BoxDecoration(
+                          color: i == _page ? kRed : Colors.white38,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
-                    ),
-                ]),
+                  ]),
+                ),
               ),
+            ],
           ]),
         );
       },
@@ -146,15 +173,18 @@ class _HeroSlide extends ConsumerWidget {
               style: const TextStyle(
                   color: Colors.white, fontSize: 38, fontWeight: FontWeight.w800, height: 1.1,
                   shadows: [Shadow(color: Colors.black, blurRadius: 12)])),
-          const SizedBox(height: 10),
-          // Hàng thông tin: điểm + chất lượng + tập
+          if (movie.originalName.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(movie.originalName,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white60, fontSize: 15, fontWeight: FontWeight.w500)),
+          ],
+          const SizedBox(height: 12),
+          // Hàng thông tin: IMDb + chất lượng + tập
           Row(children: [
             if (rating != null) ...[
-              const Icon(Icons.star, color: Colors.amber, size: 18),
-              const SizedBox(width: 4),
-              Text(rating.rating.toStringAsFixed(1),
-                  style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 15)),
-              const SizedBox(width: 14),
+              _imdb(rating.rating),
+              const SizedBox(width: 10),
             ],
             if (movie.quality.isNotEmpty) _tag(movie.quality),
             if (movie.currentEpisode.isNotEmpty) ...[
@@ -225,5 +255,15 @@ class _HeroSlide extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(color: kRed, borderRadius: BorderRadius.circular(4)),
         child: Text(s, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+      );
+
+  Widget _imdb(double r) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(color: kAmber, borderRadius: BorderRadius.circular(4)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Text('IMDb', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.w900)),
+          const SizedBox(width: 4),
+          Text(r.toStringAsFixed(1), style: const TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold)),
+        ]),
       );
 }
