@@ -189,18 +189,20 @@ class MovieCard extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Expanded(
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
           margin: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            // Khung VÀNG GOLD khi chọn/hover (giống mẫu) + quầng sáng nhẹ.
-            border: Border.all(color: hovering ? kAmber : Colors.white10, width: hovering ? 3 : 1),
-            boxShadow: hovering
-                ? [BoxShadow(color: kAmber.withValues(alpha: 0.5), blurRadius: 18, spreadRadius: 1)]
-                : null,
+            borderRadius: BorderRadius.circular(16),
+            // Khung VÀNG GOLD khi chọn/hover + bóng đổ nổi khối (luôn có) + quầng vàng khi chọn.
+            border: Border.all(color: hovering ? kAmber : Colors.white12, width: hovering ? 3 : 1),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 12, offset: const Offset(0, 6)),
+              if (hovering) BoxShadow(color: kAmber.withValues(alpha: 0.55), blurRadius: 22, spreadRadius: 1),
+            ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: BorderRadius.circular(15),
             child: Stack(fit: StackFit.expand, children: [
               CachedNetworkImage(
                 imageUrl: img, fit: BoxFit.cover,
@@ -208,11 +210,40 @@ class MovieCard extends StatelessWidget {
                 placeholder: (c, _) => Container(color: kSurface),
                 errorWidget: (c, _, _) => Container(color: kSurface, child: const Icon(Icons.movie, color: Colors.white24)),
               ),
-              if (pills.isNotEmpty)
-                Positioned(
-                  left: 6, right: 6, bottom: 6,
-                  child: Row(children: pills),
+              // Vệt tối ở đáy để badge/nhãn nổi rõ + tạo chiều sâu.
+              Positioned(
+                left: 0, right: 0, bottom: 0, height: 64,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                        colors: [Colors.black54, Colors.transparent]),
+                  ),
                 ),
+              ),
+              if (pills.isNotEmpty)
+                Positioned(left: 8, right: 8, bottom: 8, child: Row(children: pills)),
+              // Chọn/hover: phủ tối nhẹ + nút play tròn hiện dần ở giữa.
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    opacity: hovering ? 1 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: Container(
+                      color: Colors.black26,
+                      alignment: Alignment.center,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: kRed,
+                          boxShadow: [BoxShadow(color: kRed.withValues(alpha: 0.6), blurRadius: 16)],
+                        ),
+                        child: const Icon(Icons.play_arrow, color: Colors.white, size: 28),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ]),
           ),
         ),
