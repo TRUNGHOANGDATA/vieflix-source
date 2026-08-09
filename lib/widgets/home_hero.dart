@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -128,24 +129,50 @@ class _HeroSlide extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final q = movie.originalName.isNotEmpty ? movie.originalName : movie.name;
-    // Ảnh nền ngang chất lượng cao (TMDB). Không có -> dùng poster/thumb.
+    // Ảnh nền ngang chất lượng cao (TMDB). Ảnh nguonc chỉ có poster DỌC -> ép
+    // ngang sẽ xấu, nên khi không có ảnh ngang thì dùng poster dọc LÀM NỀN MỜ.
     final backdrop = ref.watch(backdropProvider(q)).maybeWhen(data: (u) => u, orElse: () => null);
-    final img = (backdrop != null && backdrop.isNotEmpty)
-        ? backdrop
-        : (movie.posterUrl.isNotEmpty ? movie.posterUrl : movie.thumbUrl);
+    final hasWide = backdrop != null && backdrop.isNotEmpty;
+    final poster = movie.posterUrl.isNotEmpty ? movie.posterUrl : movie.thumbUrl;
     final rating = ref.watch(tmdbRatingProvider(q)).maybeWhen(data: (r) => r, orElse: () => null);
     final store = ref.watch(storeProvider);
     final fav = store.isFavorite(movie.slug);
 
     return Stack(fit: StackFit.expand, children: [
-      CachedNetworkImage(
-        imageUrl: img,
-        fit: BoxFit.cover,
-        alignment: Alignment.topCenter,
-        memCacheWidth: 1280,
-        placeholder: (c, _) => Container(color: kSurface),
-        errorWidget: (c, _, __) => Container(color: kSurface),
-      ),
+      if (hasWide)
+        CachedNetworkImage(
+          imageUrl: backdrop,
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
+          memCacheWidth: 1280,
+          placeholder: (c, _) => Container(color: kSurface),
+          errorWidget: (c, _, __) => Container(color: kSurface),
+        )
+      else ...[
+        // Nền: poster dọc phủ kín + làm mờ mạnh -> đẹp, không bị cắt kỳ cục.
+        ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+          child: CachedNetworkImage(
+            imageUrl: poster, fit: BoxFit.cover, memCacheWidth: 640,
+            placeholder: (c, _) => Container(color: kSurface),
+            errorWidget: (c, _, __) => Container(color: kSurface),
+          ),
+        ),
+        // Poster dọc SẮC NÉT đặt bên phải (kiểu tấm áp phích)
+        Positioned(
+          right: 60, top: 20, bottom: 20,
+          child: AspectRatio(
+            aspectRatio: 2 / 3,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: CachedNetworkImage(
+                imageUrl: poster, fit: BoxFit.cover, memCacheWidth: 400,
+                errorWidget: (c, _, __) => Container(color: kSurface),
+              ),
+            ),
+          ),
+        ),
+      ],
       // Mờ trái->phải để chữ dễ đọc
       Container(
         decoration: const BoxDecoration(

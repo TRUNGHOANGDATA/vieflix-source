@@ -148,11 +148,12 @@ class MovieCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // TV (Android): KHÔNG dựng ô preview lớn — không có chuột để rê, mà lại
-    // tốn bộ nhớ/hiệu năng. Chỉ cần sáng viền khi remote chọn tới.
+    // tốn bộ nhớ/hiệu năng. KHÔNG phóng to (scale 1.0) để không phá layout khi
+    // chọn; báo focus bằng viền đỏ + quầng sáng + tên đổi màu đỏ trong _card.
     if (Platform.isAndroid) {
       return FocusHighlight(
         onPressed: onTap,
-        scale: 1.06,
+        scale: 1.0,
         builder: (f) => _card(f),
       );
     }
@@ -163,39 +164,41 @@ class MovieCard extends StatelessWidget {
     );
   }
 
-  // Pill nhỏ gọn (chất lượng / loại tiếng) đặt trên poster
-  Widget _pill(String s, Color bg, {Color fg = Colors.white}) => Container(
+  // Pill loại tiếng ở đáy poster (kiểu RoPhim): PĐ. (xanh ngọc) / TM. (xanh dương) / LT. (tím)
+  Widget _langPill(String s, Color bg) => Container(
+        margin: const EdgeInsets.only(right: 4),
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
         decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(4)),
-        child: Text(s, style: TextStyle(color: fg, fontSize: 9, fontWeight: FontWeight.bold)),
+        child: Text(s, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
       );
 
-  Widget _langBadge(Movie m) {
-    if (m.hasLongTieng) return _pill('LT', const Color(0xFF1565C0));
-    if (m.hasThuyetMinh) return _pill('TM', const Color(0xFF2E7D32));
-    if (m.hasPhuDe) return _pill('PĐ', Colors.black.withValues(alpha: 0.65));
-    return const SizedBox.shrink();
-  }
+  List<Widget> _langPills(Movie m) => [
+        if (m.hasPhuDe) _langPill('PĐ.', const Color(0xFF00A6A6)),
+        if (m.hasThuyetMinh) _langPill('TM.', const Color(0xFF2962FF)),
+        if (m.hasLongTieng) _langPill('LT.', const Color(0xFF7C4DFF)),
+      ];
 
-  /// Card kiểu hiện đại: poster bo góc + badge nhỏ; TÊN PHIM (Việt + tên gốc)
-  /// nằm BÊN DƯỚI poster. Khi chọn/hover: phóng nhẹ + quầng đỏ + tên đổi màu đỏ.
+  /// Card kiểu RoPhim: poster dọc bo góc, pill loại tiếng ở ĐÁY poster; TÊN PHIM
+  /// (Việt + tên gốc) và số tập nằm BÊN DƯỚI. Chọn/hover: viền đỏ + quầng sáng +
+  /// tên đổi màu đỏ (KHÔNG phóng to trên TV để khỏi phá layout).
   Widget _card(bool hovering) {
     final m = movie;
     final img = m.thumbUrl.isNotEmpty ? m.thumbUrl : m.posterUrl;
+    final pills = _langPills(m);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Expanded(
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           margin: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: hovering ? kRed : Colors.white10, width: hovering ? 2 : 1),
             boxShadow: hovering
-                ? [BoxShadow(color: kRed.withValues(alpha: 0.5), blurRadius: 18, spreadRadius: 1)]
+                ? [BoxShadow(color: kRed.withValues(alpha: 0.5), blurRadius: 16, spreadRadius: 1)]
                 : null,
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(11),
             child: Stack(fit: StackFit.expand, children: [
               CachedNetworkImage(
                 imageUrl: img, fit: BoxFit.cover,
@@ -203,20 +206,10 @@ class MovieCard extends StatelessWidget {
                 placeholder: (c, _) => Container(color: kSurface),
                 errorWidget: (c, _, _) => Container(color: kSurface, child: const Icon(Icons.movie, color: Colors.white24)),
               ),
-              if (m.quality.isNotEmpty) Positioned(top: 6, left: 6, child: _pill(m.quality, kRed)),
-              Positioned(top: 6, right: 6, child: _langBadge(m)),
-              if (m.currentEpisode.isNotEmpty)
+              if (pills.isNotEmpty)
                 Positioned(
-                  left: 0, right: 0, bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(8, 16, 8, 6),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.center,
-                          colors: [Colors.black87, Colors.transparent]),
-                    ),
-                    child: Text(episodeLabel(m), maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
-                  ),
+                  left: 6, right: 6, bottom: 6,
+                  child: Row(children: pills),
                 ),
             ]),
           ),
@@ -230,6 +223,9 @@ class MovieCard extends StatelessWidget {
           if (m.originalName.isNotEmpty)
             Text(m.originalName, maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: Colors.white38, fontSize: 11)),
+          if (m.currentEpisode.isNotEmpty)
+            Text(episodeLabel(m), maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white54, fontSize: 11)),
         ]),
       ),
     ]);
