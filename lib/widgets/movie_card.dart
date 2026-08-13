@@ -173,11 +173,34 @@ class MovieCard extends StatelessWidget {
         child: Text(s, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
       );
 
-  List<Widget> _langPills(Movie m) => [
-        if (m.hasPhuDe) _langPill('PĐ.', const Color(0xFF00A6A6)),
-        if (m.hasThuyetMinh) _langPill('TM.', const Color(0xFF2962FF)),
-        if (m.hasLongTieng) _langPill('LT.', const Color(0xFF7C4DFF)),
-      ];
+  List<Widget> _langPills(Movie m) {
+    final ep = _epNum(m);
+    final tag = ep.isNotEmpty ? ' $ep' : '';
+    return [
+      if (m.hasPhuDe) _langPill('PĐ.$tag', const Color(0xFF00A6A6)),
+      if (m.hasThuyetMinh) _langPill('TM.$tag', const Color(0xFF2962FF)),
+      if (m.hasLongTieng) _langPill('LT.$tag', const Color(0xFF7C4DFF)),
+    ];
+  }
+
+  // Số tập hiện tại (chỉ lấy phần số): "Tập 12" -> "12", "Hoàn tất (16/16)" -> "16".
+  String _epNum(Movie m) {
+    final match = RegExp(r'(\d+)').firstMatch(m.currentEpisode);
+    return match?.group(1) ?? '';
+  }
+
+  // "Phần" lấy từ tên phim ("... (Phần 2)" -> 2), mặc định 1 (giống RoPhim).
+  int _season(String name) {
+    final match = RegExp(r'[Pp]hần\s*(\d+)').firstMatch(name);
+    return match != null ? int.parse(match.group(1)!) : 1;
+  }
+
+  // Dòng dưới tên: "Phần 1 • Tập 12"; phim lẻ (không có số tập) giữ nguyên chữ.
+  String _metaLine(Movie m) {
+    final ep = _epNum(m);
+    if (ep.isEmpty) return m.currentEpisode.trim();
+    return 'Phần ${_season(m.name)} • Tập $ep';
+  }
 
   /// Card kiểu RoPhim: poster dọc bo góc, pill loại tiếng ở ĐÁY poster; TÊN PHIM
   /// (Việt + tên gốc) và số tập nằm BÊN DƯỚI. Chọn/hover: viền đỏ + quầng sáng +
@@ -263,7 +286,7 @@ class MovieCard extends StatelessWidget {
                 Text(m.originalName, maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white38, fontSize: 11)),
               if (m.currentEpisode.isNotEmpty)
-                Text(episodeLabel(m), maxLines: 1, overflow: TextOverflow.ellipsis,
+                Text(_metaLine(m), maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white54, fontSize: 11)),
             ]),
           ),
