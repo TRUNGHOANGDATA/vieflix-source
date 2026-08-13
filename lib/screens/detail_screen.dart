@@ -97,8 +97,8 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: Colors.white,
-        title: Text(widget.title,
-            style: const TextStyle(fontSize: 16, shadows: [Shadow(color: Colors.black, blurRadius: 8)])),
+        // Không đặt tiêu đề ở đây: AppBar trong suốt nằm cố định, cuộn lên sẽ đè
+        // chữ lên nội dung nhìn rất xấu. Tên phim đã hiện to trong header rồi.
       ),
       body: AsyncView<MovieDetail>(
         value: detail,
@@ -227,13 +227,25 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           if (hasServer) ...[
             // Chọn server (kèm số tập). Mặc định ưu tiên Thuyết minh.
-            Wrap(spacing: 8, children: [
+            // Dùng FocusHighlight để remote TV chọn rõ + tự cuộn tới.
+            Wrap(spacing: 8, runSpacing: 8, children: [
               for (int i = 0; i < servers.length; i++)
-                ChoiceChip(
-                  label: Text('${servers[i].serverName} · ${servers[i].items.length} tập'),
-                  selected: srv == i,
-                  selectedColor: kRed,
-                  onSelected: (_) => setState(() => _userServer = i),
+                FocusHighlight(
+                  scale: 1.0,
+                  onPressed: () => setState(() => _userServer = i),
+                  builder: (f) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: srv == i ? kRed : kSurface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: f ? kAmber : Colors.transparent, width: 2),
+                    ),
+                    child: Text('${servers[i].serverName} · ${servers[i].items.length} tập',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: srv == i ? FontWeight.bold : FontWeight.normal)),
+                  ),
                 ),
             ]),
             const SizedBox(height: 10),
@@ -250,17 +262,29 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
               ]);
             }),
             const SizedBox(height: 12),
-            // Lưới tập đều nhau, đã sắp xếp theo số thứ tự
+            // Lưới tập đều nhau, đã sắp xếp theo số thứ tự.
+            // FocusHighlight: remote chọn rõ (viền vàng) + TỰ CUỘN tới khi lên/xuống.
             Wrap(spacing: 8, runSpacing: 8, children: [
               for (final ep in eps)
                 SizedBox(
-                  width: 68,
-                  child: ActionChip(
-                    backgroundColor: kSurface,
-                    padding: EdgeInsets.zero,
-                    labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    label: Center(child: Text(_epLabel(ep.name), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12))),
+                  width: 72,
+                  child: FocusHighlight(
+                    scale: 1.0,
                     onPressed: () => _play(d, servers[srv], eps, ep),
+                    builder: (f) => Container(
+                      height: 36,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: f ? kRed : kSurface,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: f ? kAmber : Colors.white10, width: 2),
+                      ),
+                      child: Text(_epLabel(ep.name),
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: Colors.white, fontSize: 12,
+                              fontWeight: f ? FontWeight.bold : FontWeight.normal)),
+                    ),
                   ),
                 ),
             ]),
@@ -334,38 +358,17 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
   /// Nút "Xem tiếp" được chọn sẵn -> trên TV chỉ cần bấm OK.
   Future<void> _playSmart(MovieDetail d, ServerGroup s, List<Episode> eps) async {
     if (eps.isEmpty) return;
+    // App chỉ mở ĐÚNG TẬP đang xem dở. VỊ TRÍ trong tập do NGUỒN (nguonc) tự nhớ:
+    // khi mở lại, trang nguồn hiện hộp "Bạn đã dừng lại ở ..." và app tự bấm
+    // "Tiếp tục xem" hộ (remote không bấm được nút web). App KHÔNG tự tua/hỏi lại
+    // nữa để khỏi đá nhau với cơ chế nhớ của nguồn.
     final p = ref.read(storeProvider).progressFor(d.slug);
-    final idx = p == null ? -1 : eps.indexWhere((e) => e.slug == p.episodeSlug);
-    // Không có tiến độ, hoặc đang dở chính tập đầu -> xem luôn từ đầu.
-    if (idx <= 0) {
-      _play(d, s, eps, eps.first);
-      return;
+    var idx = 0;
+    if (p != null) {
+      final i = eps.indexWhere((e) => e.slug == p.episodeSlug);
+      if (i >= 0) idx = i;
     }
-
-    final resume = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: kSurface,
-        title: const Text('Bạn đang xem dở phim này', style: TextStyle(color: Colors.white)),
-        content: Text('Xem tiếp ${_epLabel(eps[idx].name)} hay xem lại từ đầu?',
-            style: const TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Xem từ đầu', style: TextStyle(color: Colors.white70)),
-          ),
-          ElevatedButton(
-            autofocus: true, // remote: bấm OK là xem tiếp
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Xem tiếp ${_epLabel(eps[idx].name)}'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || resume == null) return; // thoát hộp thoại -> không làm gì
-    // Xem tiếp -> nhớ luôn chỗ đang dừng trong tập; xem từ đầu -> 0.
-    final startPos = resume ? (p?.positionSeconds ?? 0.0) : 0.0;
-    _play(d, s, eps, resume ? eps[idx] : eps.first, startPosition: startPos);
+    _play(d, s, eps, eps[idx]);
   }
 
   void _play(MovieDetail d, ServerGroup s, List<Episode> eps, Episode ep, {double startPosition = 0}) {
