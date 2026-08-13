@@ -12,6 +12,11 @@ final apiProvider = Provider<NguoncApi>((ref) => NguoncApi());
 /// Tăng giá trị này để buộc Trang chủ vẽ lại (sau khi xoá mục Xem tiếp...).
 final homeRefreshProvider = StateProvider<int>((ref) => 0);
 
+/// TV: người dùng ĐANG gõ trong ô tìm ở màn Thư viện hay không.
+/// Shell đọc cờ này để: bấm Back khi đang gõ thì chỉ THOÁT ô gõ (bỏ focus bàn
+/// phím), KHÔNG nhảy về Trang chủ.
+final searchTypingProvider = StateProvider<bool>((ref) => false);
+
 // Kiểm tra bản cập nhật (GitHub Releases). Null nếu chưa cấu hình / không có bản mới.
 final updateProvider = FutureProvider<UpdateInfo?>((ref) => UpdateChecker().check());
 
@@ -141,6 +146,10 @@ final topSeriesProvider = FutureProvider<List<Movie>>((ref) async {
 final latestProvider =
     FutureProvider<Paginated<Movie>>((ref) => ref.read(apiProvider).latest());
 
+// Danh sách phim mới cập nhật (dạng List) — dùng cho gợi ý ở trang Tìm kiếm.
+final latestListProvider = FutureProvider<List<Movie>>(
+    (ref) async => (await ref.read(apiProvider).latest(page: 1)).items.take(20).toList());
+
 final typeRowProvider = FutureProvider.family<List<Movie>, String>(
     (ref, type) async => (await ref.read(apiProvider).listByType(type)).items);
 
@@ -202,12 +211,15 @@ final searchProvider = FutureProvider.family<List<Movie>, String>((ref, q) async
         .toList();
     if (exact.isNotEmpty) list = exact; // nếu lọc ra rỗng thì giữ nguyên để còn kết quả
   }
-  // Xếp phim khớp sát tên lên đầu
+  // Xếp phim khớp sát tên lên đầu. So sánh theo bản ĐÃ BỎ DẤU để gõ không dấu
+  // (vd "nguoi nhen") vẫn đưa đúng "Người Nhện" lên trước.
+  final qs = _stripDiacritics(ql);
   int rank(Movie m) {
-    final n = m.name.toLowerCase();
-    if (n == ql) return 0;
-    if (n.startsWith(ql)) return 1;
-    if (n.contains(ql)) return 2;
+    final n = _stripDiacritics(m.name.toLowerCase());
+    final o = _stripDiacritics(m.originalName.toLowerCase());
+    if (n == qs) return 0;
+    if (n.startsWith(qs)) return 1;
+    if (n.contains(qs) || o.contains(qs)) return 2;
     return 3;
   }
   list.sort((a, b) => rank(a).compareTo(rank(b)));

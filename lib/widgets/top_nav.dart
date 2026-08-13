@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../data/update_checker.dart' show kAppVersion;
+import 'brand_logo.dart';
 import 'tv_focusable.dart';
 
 class NavItem {
@@ -9,11 +10,12 @@ class NavItem {
   const NavItem(this.icon, this.label);
 }
 
+// "Thư viện phim" giờ gộp luôn Tìm kiếm (ô tìm + bộ lọc nằm trong đó) nên bỏ
+// tab "Tìm kiếm" riêng.
 const kNavItems = [
   NavItem(Icons.home, 'Trang chủ'),
   NavItem(Icons.play_circle_outline, 'Đang xem'),
   NavItem(Icons.grid_view, 'Thư viện phim'),
-  NavItem(Icons.search, 'Tìm kiếm'),
   NavItem(Icons.favorite, 'Yêu thích'),
 ];
 
@@ -32,42 +34,59 @@ class TopNav extends StatelessWidget {
         color: Colors.black,
         border: Border(bottom: BorderSide(color: Colors.white10)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      // Lề rộng hơn để TV không cắt mất mép (overscan).
+      padding: const EdgeInsets.symmetric(horizontal: 34),
       child: Row(children: [
         FocusHighlight(
           onPressed: () => onSelect(0),
           scale: 1.0,
           builder: (f) => Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: f ? kRed : Colors.transparent, width: 2),
             ),
-            child: Row(children: [
-              Container(
-                padding: const EdgeInsets.fromLTRB(7, 6, 9, 6),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [kRed, Color(0xFFB00610)]),
-                  borderRadius: BorderRadius.circular(9),
-                  boxShadow: [BoxShadow(color: kRed.withValues(alpha: 0.55), blurRadius: 12)],
-                ),
-                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
-              ),
-              const SizedBox(width: 9),
-              const Text('Vie',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 23, letterSpacing: 0.3)),
-              const Text('Flix',
-                  style: TextStyle(color: kRed, fontWeight: FontWeight.w800, fontSize: 23, letterSpacing: 0.3)),
-            ]),
+            child: const BrandLogo(height: 28),
           ),
         ),
-        const SizedBox(width: 28),
+        const SizedBox(width: 14),
         for (int i = 0; i < kNavItems.length; i++) _item(i),
-        const Spacer(),
-        // Phiên bản hiện tại — để mở app là biết đang chạy bản nào.
+        // Nút Cài đặt (bánh răng) đặt ngay sau các tab cho gọn, không dạt hẳn ra mép phải.
+        _settings(),
+        const SizedBox(width: 12),
+        // Phiên bản đặt LUÔN trong cụm trái để TV không cắt mất (trước đây dạt ra
+        // mép phải nên bị overscan che). Spacer đẩy phần còn lại về phải.
         Text('v$kAppVersion',
-            style: const TextStyle(color: Colors.white38, fontSize: 13, fontWeight: FontWeight.w600)),
+            style: const TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w600)),
+        const Spacer(),
       ]),
+    );
+  }
+
+  /// Nút Cài đặt ở góc phải (index = kNavItems.length).
+  Widget _settings() {
+    const idx = 4; // ngay sau 4 tab thường
+    final sel = selected == idx;
+    return FocusHighlight(
+      onPressed: () => onSelect(idx),
+      scale: 1.0,
+      builder: (f) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+        decoration: BoxDecoration(
+          color: f ? Colors.white12 : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: f ? kRed : Colors.transparent, width: 2),
+        ),
+        child: Row(children: [
+          Icon(Icons.settings, size: 16, color: sel ? kRed : (f ? Colors.white : Colors.white70)),
+          const SizedBox(width: 5),
+          Text('Cài đặt',
+              style: TextStyle(
+                  color: sel ? kRed : (f ? Colors.white : Colors.white70),
+                  fontSize: 13.5,
+                  fontWeight: (sel || f) ? FontWeight.bold : FontWeight.normal)),
+        ]),
+      ),
     );
   }
 
@@ -78,20 +97,20 @@ class TopNav extends StatelessWidget {
       scale: 1.0,
       autofocus: i == 0, // để remote có điểm bắt đầu khi mở app
       builder: (f) => Container(
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        margin: const EdgeInsets.symmetric(horizontal: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
         decoration: BoxDecoration(
           color: f ? Colors.white12 : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: f ? kRed : Colors.transparent, width: 2),
         ),
         child: Row(children: [
-          Icon(kNavItems[i].icon, size: 18, color: sel ? kRed : (f ? Colors.white : Colors.white70)),
-          const SizedBox(width: 6),
+          Icon(kNavItems[i].icon, size: 16, color: sel ? kRed : (f ? Colors.white : Colors.white70)),
+          const SizedBox(width: 5),
           Text(kNavItems[i].label,
               style: TextStyle(
                   color: sel ? kRed : (f ? Colors.white : Colors.white70),
-                  fontSize: 15,
+                  fontSize: 13.5,
                   fontWeight: (sel || f) ? FontWeight.bold : FontWeight.normal)),
         ]),
       ),

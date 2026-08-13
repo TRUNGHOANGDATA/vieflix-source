@@ -6,7 +6,8 @@ import '../models/movie.dart';
 import '../state/providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/movie_card.dart';
-import '../widgets/filter_bar.dart';
+import '../widgets/tv_filter_bar.dart';
+import '../widgets/lang_filter_row.dart';
 import '../widgets/async_view.dart';
 import '../widgets/shimmer.dart';
 import 'detail_screen.dart';
@@ -73,45 +74,6 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
         (_langs.contains('longtieng') && m.hasLongTieng)).toList();
   }
 
-  Widget _langChips() {
-    // val == null là nút "Mọi loại tiếng" (xoá hết lựa chọn)
-    Widget chip(String label, String? val) {
-      final selected = val == null ? _langs.isEmpty : _langs.contains(val);
-      return Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: FilterChip(
-          label: Text(label),
-          selected: selected,
-          selectedColor: kRed,
-          checkmarkColor: Colors.white,
-          labelStyle: TextStyle(color: selected ? Colors.white : Colors.white70),
-          backgroundColor: kSurface,
-          side: BorderSide.none,
-          onSelected: (_) => setState(() {
-            if (val == null) {
-              _langs.clear();
-            } else if (_langs.contains(val)) {
-              _langs.remove(val);
-            } else {
-              _langs.add(val);
-            }
-          }),
-        ),
-      );
-    }
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-      child: Row(children: [
-        chip('Mọi loại tiếng', null),
-        chip('Phụ đề', 'phude'),
-        chip('Thuyết minh', 'thuyetminh'),
-        chip('Lồng tiếng', 'longtieng'),
-      ]),
-    );
-  }
-
   Widget _grid(List<Movie> items) => GridView.builder(
         controller: _scroll,
         padding: const EdgeInsets.all(12),
@@ -147,8 +109,15 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
             onChanged: _onKeyword,
           ),
         ),
-        if (!searching) FilterBar(current: _q, onChanged: (q) => setState(() => _q = q)),
-        _langChips(),
+        if (!searching) TvFilterBar(current: _q, onChanged: (q) => setState(() => _q = q)),
+        LangFilterRow(
+          selected: _langs,
+          onChanged: (s) => setState(() {
+            _langs
+              ..clear()
+              ..addAll(s);
+          }),
+        ),
         Expanded(
           child: searching
               ? AsyncView(

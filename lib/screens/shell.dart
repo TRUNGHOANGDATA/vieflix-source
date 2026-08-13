@@ -8,8 +8,8 @@ import '../widgets/top_nav.dart';
 import 'home_screen.dart';
 import 'watching_screen.dart';
 import 'browse_screen.dart';
-import 'search_screen.dart';
 import 'my_list_screen.dart';
+import 'settings_screen.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -23,13 +23,19 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    const pages = [HomeScreen(), WatchingScreen(), BrowseScreen(), SearchScreen(), MyListScreen()];
+    const pages = [HomeScreen(), WatchingScreen(), BrowseScreen(), MyListScreen(), SettingsScreen()];
     final info = ref.watch(updateProvider).maybeWhen(data: (u) => u, orElse: () => null);
     return PopScope(
       // Ở Trang chủ: nút Back thoát app. Ở tab khác: Back quay về Trang chủ trước.
       canPop: _i == 0,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _i != 0) setState(() => _i = 0);
+        if (didPop) return;
+        // Đang gõ tìm phim -> Back chỉ THOÁT ô gõ, không nhảy về Trang chủ.
+        if (ref.read(searchTypingProvider)) {
+          ref.read(searchTypingProvider.notifier).state = false;
+          return;
+        }
+        if (_i != 0) setState(() => _i = 0);
       },
       child: Scaffold(
         body: Column(children: [
