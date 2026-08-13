@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../state/providers.dart';
 import '../theme/app_theme.dart';
 import '../data/update_checker.dart';
 import '../data/update_flow.dart';
+import '../data/sync_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -14,6 +16,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late final TextEditingController _ctrl;
   bool _checking = false;
+  bool _syncing = false;
 
   @override
   void initState() {
@@ -66,6 +69,119 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (go == true && mounted) startUpdateFlow(context, info);
   }
 
+  /// Tạo mã đồng bộ: đóng gói dữ liệu -> đẩy lên mạng -> hiện mã cho máy kia nhập.
+  Future<void> _createSyncCode() async {
+    setState(() => _syncing = true);
+    try {
+      final data = ref.read(storeProvider).exportData();
+      final code = await SyncService().upload(data);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (c) => AlertDialog(
+          backgroundColor: kSurface,
+          title: const Text('Mã đồng bộ của bạn', style: TextStyle(color: Colors.white)),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Ở máy KIA: mở Cài đặt → "Nhập mã đồng bộ" → gõ đúng mã này:',
+                style: TextStyle(color: Colors.white70, height: 1.4)),
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+              decoration: BoxDecoration(
+                color: kBg, borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: kRed, width: 2),
+              ),
+              child: SelectableText(code,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: kAmber, fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: 3)),
+            ),
+            const SizedBox(height: 8),
+            const Text('Mã phân biệt chữ HOA/thường, dùng được trong 1 năm.',
+                style: TextStyle(color: Colors.white38, fontSize: 12)),
+          ]),
+          actions: [
+            TextButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: code));
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(backgroundColor: kRed, content: Text('Đã sao chép mã')));
+              },
+              icon: const Icon(Icons.copy),
+              label: const Text('Sao chép'),
+            ),
+            ElevatedButton(
+              autofocus: true,
+              style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: Colors.white),
+              onPressed: () => Navigator.pop(c),
+              child: const Text('Xong'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(backgroundColor: kRed, content: Text('Không tạo được mã: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
+  }
+
+  /// Nhập mã đồng bộ: hỏi mã -> tải gói về -> gộp vào máy này.
+  Future<void> _enterSyncCode() async {
+    final ctrl = TextEditingController();
+    final code = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: kSurface,
+        title: const Text('Nhập mã đồng bộ', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.none,
+          style: const TextStyle(color: Colors.white, fontSize: 20, letterSpacing: 2),
+          decoration: InputDecoration(
+            hintText: 'Gõ mã từ máy kia…',
+            hintStyle: const TextStyle(color: Colors.white38),
+            filled: true, fillColor: kBg,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+          ),
+          onSubmitted: (v) => Navigator.pop(c, v),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Hủy')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(c, ctrl.text),
+            child: const Text('Nhập'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (code == null || code.trim().isEmpty) return;
+    setState(() => _syncing = true);
+    try {
+      final data = await SyncService().download(code);
+      final (pc, fc) = await ref.read(storeProvider).importData(data);
+      ref.read(homeRefreshProvider.notifier).state++; // vẽ lại "Xem tiếp"
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            backgroundColor: kRed,
+            content: Text('Đã nhận $pc mục đang xem, $fc phim yêu thích ✓')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(backgroundColor: kRed, content: Text('Không nhập được: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
+  }
+
   Future<void> _save() async {
     final key = _ctrl.text.trim();
     await ref.read(storeProvider).setTmdbKey(key);
@@ -108,6 +224,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 : const Icon(Icons.system_update),
             label: Text(_checking ? 'Đang kiểm tra…' : 'Kiểm tra cập nhật'),
           ),
+        ]),
+      ),
+      const SizedBox(height: 16),
+      // --- Đồng bộ giữa các máy ---
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: kSurface, borderRadius: BorderRadius.circular(8)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: const [
+            Icon(Icons.sync, color: Colors.white70, size: 22),
+            SizedBox(width: 12),
+            Text('Đồng bộ giữa các máy',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          ]),
+          const SizedBox(height: 8),
+          const Text(
+            'Mang danh sách "đang xem" và "yêu thích" sang máy/TV khác bằng một mã ngắn. '
+            'Máy này bấm "Tạo mã", máy kia bấm "Nhập mã" rồi gõ mã vào.',
+            style: TextStyle(color: Colors.white70, height: 1.4),
+          ),
+          const SizedBox(height: 12),
+          Wrap(spacing: 12, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: Colors.white),
+              onPressed: _syncing ? null : _createSyncCode,
+              icon: const Icon(Icons.cloud_upload),
+              label: const Text('Tạo mã đồng bộ'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _syncing ? null : _enterSyncCode,
+              icon: const Icon(Icons.cloud_download, color: Colors.white),
+              label: const Text('Nhập mã đồng bộ', style: TextStyle(color: Colors.white)),
+            ),
+            if (_syncing)
+              const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+          ]),
         ]),
       ),
       const SizedBox(height: 24),

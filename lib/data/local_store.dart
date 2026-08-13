@@ -187,6 +187,55 @@ class LocalStore {
 
   WatchProgress? progressFor(String slug) => _progress[slug];
 
+  // --- Đồng bộ giữa các máy: xuất/nhập toàn bộ "đang xem" + "yêu thích" ---
+
+  /// Gói dữ liệu để mang qua máy khác (JSON gọn: tiến độ + phim đã lưu).
+  String exportData() => jsonEncode({
+        'v': 1,
+        'progress': _progress.map((k, v) => MapEntry(k, v.toJson())),
+        'favorites': _favorites.map(_favToStored).toList(),
+      });
+
+  /// Nhập gói dữ liệu từ máy khác và GỘP vào (giữ bản xem mới hơn, thêm phim
+  /// yêu thích còn thiếu). Trả về (số mục đang xem, số phim yêu thích) đã nhận.
+  Future<(int, int)> importData(String jsonStr) async {
+    final data = jsonDecode(jsonStr);
+    if (data is! Map) throw const FormatException('Dữ liệu không hợp lệ');
+    int pc = 0, fc = 0;
+
+    final prog = data['progress'];
+    if (prog is Map) {
+      prog.forEach((k, v) {
+        try {
+          final wp = WatchProgress.fromJson((v as Map).cast<String, dynamic>());
+          final cur = _progress[k as String];
+          if (cur == null || wp.updatedAt >= cur.updatedAt) {
+            _progress[k] = wp;
+            pc++;
+          }
+        } catch (_) {}
+      });
+    }
+
+    final favs = data['favorites'];
+    if (favs is List) {
+      for (final e in favs) {
+        try {
+          final m = Movie.fromJson((e as Map).cast<String, dynamic>());
+          if (m.slug.isNotEmpty && !isFavorite(m.slug)) {
+            _favorites.add(m);
+            fc++;
+          }
+        } catch (_) {}
+      }
+    }
+
+    _capProgress();
+    await _saveProgress();
+    await _p.setString(_kFav, jsonEncode(_favorites.map(_favToStored).toList()));
+    return (pc, fc);
+  }
+
   List<WatchProgress> get continueWatching {
     final list = _progress.values.toList()
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
