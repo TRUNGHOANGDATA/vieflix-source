@@ -55,3 +55,9 @@ app.*.map.json
 *.apk
 /VieFlix*.zip
 /installer/*.exe
+
+# Bản build đã đóng gói để chạy thử / demo (nhị phân ~31MB, không phải source)
+/demo-v*/
+
+# Log build dán tạm ra file
+/brel.txt
