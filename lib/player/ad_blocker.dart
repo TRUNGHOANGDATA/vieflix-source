@@ -100,7 +100,10 @@ const String kAutoPlayScript = r'''
   // (window.__VIEFLIX_RESTART) thì bấm "Xem lại từ đầu".
   function answerResumeDialog() {
     try {
-      var want = window.__VIEFLIX_RESTART ? 'xem lại từ đầu' : 'tiếp tục xem';
+      // Nguồn (nguonc) tự nhớ vị trí -> hiện hộp "Bạn đã dừng lại ở ...".
+      // Mặc định bấm "Tiếp tục xem" để XEM TIẾP đúng chỗ nguồn đã lưu.
+      // Khớp rộng ('tiếp tục' / 'từ đầu') phòng khi chữ trên nút hơi khác.
+      var want = window.__VIEFLIX_RESTART ? 'từ đầu' : 'tiếp tục';
       var els = document.querySelectorAll('button, a, div, span, input[type="button"]');
       for (var i = 0; i < els.length; i++) {
         var el = els[i];
@@ -118,6 +121,9 @@ const String kAutoPlayScript = r'''
   var n = 0;
   var t = setInterval(function () {
     answerResumeDialog();
+    // Khi video ĐÃ bắt đầu chạy -> NGỪNG ép phát, để không đè lên lệnh tạm dừng
+    // của người dùng (trước đây pause xong bị script tự bật lại sau ~1 giây).
+    if (playing()) { clearInterval(t); return; }
     tryPlay();
     // Ghi trạng thái để chẩn đoán khi phim không tự chạy (xem log của app).
     if (n === 3 || n === 12) {
@@ -181,8 +187,13 @@ const String kAntiAdUserScript = r'''
                     if (r && typeof r.on === 'function') {
                       r.on('ready', function () { try { r.play(true); } catch (e) {} });
                       r.on('pause', function () {
-                        // Nguồn đôi khi pause ngay sau ready -> đẩy chạy lại 1 lần.
-                        if (!r.__resumedOnce) { r.__resumedOnce = 1; setTimeout(function () { try { r.play(true); } catch (e) {} }, 300); }
+                        // Nguồn đôi khi pause NGAY sau ready -> đẩy chạy lại 1 lần.
+                        // Chỉ can thiệp khi pause ở đầu phim (pos<2s); KHÔNG đè khi
+                        // người dùng chủ động tạm dừng giữa chừng.
+                        try {
+                          var pos = (typeof r.getPosition === 'function') ? r.getPosition() : 0;
+                          if (!r.__resumedOnce && pos < 2) { r.__resumedOnce = 1; setTimeout(function () { try { r.play(true); } catch (e) {} }, 300); }
+                        } catch (e) {}
                       });
                     }
                   } catch (e) {}

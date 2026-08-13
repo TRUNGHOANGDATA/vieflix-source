@@ -105,7 +105,7 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver {
   InAppWebViewController? _c;
   late int _idx;
   late String _url;
@@ -125,7 +125,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // Xem tiếp từ vị trí cũ + lưu vị trí đang xem.
   double _resumeTo = 0;       // giây cần seek tới sau khi tải xong (0 = không)
   bool _resumeApplied = false;
-  int _saveTick = 0;          // đếm nhịp để ~5s mới ghi vị trí xuống đĩa 1 lần
+  int _resumeTries = 0;       // số lần đã ép seek (nguồn hay reset về 0)
+  int _saveTick = 0;          // đếm nhịp để ~3s mới ghi vị trí xuống đĩa 1 lần
 
   @override
   void initState() {
@@ -133,9 +134,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _idx = widget.startIndex < 0 ? 0 : widget.startIndex;
     _url = widget.embedUrl;
     _resumeTo = widget.startPosition;
-    _resumeApplied = widget.startPosition <= 0;
+    _resumeApplied = widget.startPosition <= 2;
     // ESC (PC) / phím remote (TV)
     HardwareKeyboard.instance.addHandler(_onKey);
+    // Theo dõi vòng đời app: khi bị đưa xuống nền / đóng đột ngột thì lưu ngay
+    // vị trí đang xem (dispose có thể không kịp chạy khi hệ thống kill app).
+    WidgetsBinding.instance.addObserver(this);
     // Cập nhật vị trí phát để vẽ thanh tiến trình.
     _pollT = Timer.periodic(const Duration(seconds: 1), (_) => _syncState());
   }
@@ -143,12 +147,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
+    WidgetsBinding.instance.removeObserver(this);
     // Lưu nốt vị trí cuối cùng khi thoát trình phát.
-    if (_dur > 0 && _pos > 0) widget.onPosition?.call(_pos, _dur);
+    _flushPosition();
     _hideT?.cancel();
     _pollT?.cancel();
     _nextT?.cancel();
     super.dispose();
+  }
+
+  /// Ghi ngay vị trí đang xem xuống đĩa (dùng khi thoát / app xuống nền).
+  void _flushPosition() {
+    if (_dur > 0 && _pos > 0) widget.onPosition?.call(_pos, _dur);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // TV/điện thoại: bấm Home hoặc hệ thống thu hồi app -> lưu ngay kẻo mất chỗ.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _flushPosition();
+    }
   }
 
   // ------- Điều khiển video qua cầu nối (chạy được cả khi player nằm trong iframe) -------
@@ -185,18 +206,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final ended = m['ended'] == 1;
       if (mounted) setState(() { _pos = pos; _dur = dur; _paused = paused; });
 
-      // Xem tiếp: khi biết thời lượng thì seek tới vị trí cũ (bỏ qua nếu quá sát cuối).
+      // Xem tiếp: seek tới vị trí cũ. Nguồn phim hay reset về 0 sau khi tải, nên
+      // ÉP seek NHIỀU LẦN cho tới khi vị trí "ăn" (hoặc thử đủ số lần thì thôi).
       if (!_resumeApplied && dur > 0) {
-        _resumeApplied = true;
-        if (_resumeTo > 5 && _resumeTo < dur - 15) {
-          _cmd('seekto', _resumeTo);
+        if (_resumeTo <= 2 || _resumeTo >= dur - 8) {
+          _resumeApplied = true;              // không cần seek
+        } else if (pos >= _resumeTo - 4) {
+          _resumeApplied = true;              // đã tới đúng chỗ
+        } else if (_resumeTries < 8) {
+          _resumeTries++;
+          _cmd('seekto', _resumeTo);          // seek lại (đè việc nguồn nhảy về 0)
+        } else {
+          _resumeApplied = true;              // thử đủ rồi, thôi để khỏi kẹt
         }
       }
 
-      // Lưu vị trí đang xem xuống đĩa mỗi ~5 giây (để "Xem tiếp" nhớ chỗ dừng).
+      // Lưu vị trí đang xem xuống đĩa mỗi ~3 giây (để "Xem tiếp" nhớ chỗ dừng,
+      // ít mất khi app bị đóng đột ngột).
       if (dur > 0 && pos > 0) {
         _saveTick++;
-        if (_saveTick >= 5) { _saveTick = 0; widget.onPosition?.call(pos, dur); }
+        if (_saveTick >= 3) { _saveTick = 0; widget.onPosition?.call(pos, dur); }
       }
 
       // Hết tập: cờ ended, hoặc chạy tới sát cuối (một số nguồn không bắn ended).
