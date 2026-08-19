@@ -14,6 +14,8 @@ Quy trình đầy đủ để ra một bản VieFlix mới: tăng phiên bản �
 - Exe sau build: `build/windows/x64/runner/Release/VieFlix.exe`
 - APK sau build: `build/app/outputs/flutter-apk/app-release.apk`
 - Phiên bản app nằm ở hằng `kAppVersion` trong `lib/data/update_checker.dart`
+- `gh` CLI: `C:\Program Files\GitHub CLI\gh.exe` (cài 19/08/2026) — dùng để đăng release + upload file, xem Bước 5. **Chưa `gh auth login`** tính tới 19/08/2026.
+- **3 chỗ phải bump cùng lúc mỗi bản**: `kAppVersion`, `version:` trong `pubspec.yaml`, `#define MyAppVersion` trong `installer/VieFlix.iss`. Sót một chỗ là app tự báo có bản mới cho chính nó, hoặc Android từ chối cài đè.
 - **Mỗi release đăng CẢ HAI file**: bộ cài Windows `VieFlix-Setup-vX.Y.Z.exe` và Android `VieFlix-TV.apk`. App tự cập nhật chọn đúng file theo nền tảng đang chạy.
 - ⚠️ **APK PHẢI đặt tên đúng `VieFlix-TV.apk`** (KHÔNG kèm số phiên bản) để link tải cố định luôn trỏ bản mới nhất:
   `https://github.com/TRUNGHOANGDATA/vieflix/releases/latest/download/VieFlix-TV.apk`
@@ -66,13 +68,25 @@ Ra file `build/app/outputs/flutter-apk/app-release.apk`. Chép ra tên theo phi�
 $ver = "X.Y.Z"   # <-- đổi cho khớp
 Copy-Item "H:\Tao App Xem Phim\build\app\outputs\flutter-apk\app-release.apk" "H:\Tao App Xem Phim\VieFlix-v$ver.apk" -Force
 ```
-Kiểm tra APK ký đúng khóa release (KHÔNG phải debug):
+**Kiểm APK trước khi đăng** (2 lệnh này thực sự kiểm được, khác với cách cũ chỉ grep log build — log không hề nói APK ký bằng khóa nào):
 ```bash
-"H:/flutter/bin/flutter" build apk --release 2>&1 | grep -i sign || true
+bt=$(ls -d H:/Android/Sdk/build-tools/*/ | tail -1)
+# 1. versionCode PHẢI tăng so với bản trước, versionName khớp kAppVersion
+"${bt}aapt2.exe" dump badging build/app/outputs/flutter-apk/app-release.apk | grep -E "^package"
+# 2. Chữ ký PHẢI là CN=VieFlix, SHA-256 5068a120db147c8e7dc85f6b69c517d0f607e0dffe2fd1896d443ef21df2b758
+JAVA_HOME="H:/Android/jdk17/jdk-17.0.20+8" "${bt}apksigner.bat" verify --print-certs \
+  build/app/outputs/flutter-apk/app-release.apk | grep "SHA-256 digest"
 ```
-Nếu `android/key.properties` chưa có → APK bị ký debug → **KHÔNG cập nhật đè được**. Phải tạo khóa trước (docs/ANDROID_TV.md).
+⚠️ ĐỪNG dùng `keytool -printcert -jarfile` để kiểm — APK ký theo scheme v2/v3 (không còn chữ ký JAR v1) nên keytool **không in ra gì**, dễ tưởng là APK hỏng.
 
-### 4. Đóng gói zip (LOẠI thư mục cache WebView2)
+Nếu SHA-256 khác dòng trên → APK bị ký khóa khác (hoặc ký debug do thiếu `android/key.properties`) → Android **từ chối cập nhật đè**, user phải gỡ app cũ. Phải sửa khóa trước khi đăng (docs/ANDROID_TV.md).
+
+### 4. Đóng gói zip — THỰC TẾ KHÔNG CÒN DÙNG
+Từ 1.0.3 trở đi mỗi release chỉ đăng **bộ cài `.exe` + `.apk`** (xem mục "Tạo bộ cài" ở dưới — mục đó ghi "tùy chọn" nhưng thực tế nó là cách chính). Bản 1.0.15 và 1.0.16 đều KHÔNG có zip. Giữ phần dưới đây làm dự phòng nếu cần gói không-cài-đặt.
+
+<details><summary>Cách đóng zip (dự phòng)</summary>
+
+#### Đóng gói zip (LOẠI thư mục cache WebView2)
 Thư mục `VieFlix.exe.WebView2` (~80MB, sinh ra khi chạy app) KHÔNG được cho vào zip.
 **Đặt tên file zip THEO PHIÊN BẢN** (`VieFlix-vX.Y.Z.zip`) để user khỏi nhầm — thay `X.Y.Z` cho khớp bản đang đóng.
 ```powershell
@@ -89,21 +103,51 @@ Remove-Item $stage -Recurse -Force
 ```
 Gói ~12–13MB. Gửi cho user bằng SendUserFile. (App tự cập nhật chọn asset đầu tiên có đuôi `.zip`, nên tên có kèm phiên bản vẫn hoạt động bình thường.)
 
-### 5. Đăng GitHub Release (qua claude-in-chrome)
-Điều khiển trình duyệt đã đăng nhập GitHub của user:
-1. `navigate` tới `https://github.com/TRUNGHOANGDATA/vieflix/releases/new`
-2. Mở dropdown **Tag: Select tag** → gõ `vX.Y.Z` → bấm **Create new tag** → trong hộp thoại hiện ra bấm nút **Create** (BƯỚC NÀY DỄ SÓT — thiếu nó tag không được tạo, Publish sẽ lỗi "tag name can't be blank").
-3. Điền **Release title**: `VieFlix vX.Y.Z`
-4. Điền ghi chú thay đổi vào ô mô tả.
-5. Bấm **Publish release**.
+</details>
 
-### 6. Đính kèm file zip + apk — NHỜ USER LÀM
-Công cụ `file_upload` của Claude giới hạn **10MB**, mà zip ~12–13MB và apk còn lớn hơn → **Claude KHÔNG upload được**. Sau khi Publish, mở trang **Edit release** (nút bút chì ✏️), cuộn tới khung **"Attach binaries..."**, rồi hướng dẫn user tự:
-- Bấm khung Attach → chọn **CẢ HAI** file `VieFlix-vX.Y.Z.zip` và `VieFlix-vX.Y.Z.apk` → đợi 100% → bấm **Update release**.
+### 5. Đăng GitHub Release + upload file
 
-Đừng cố tự upload — sẽ báo lỗi vượt 10MB. Luôn giao khâu này cho user. App tự cập nhật sẽ chọn `.apk` khi chạy trên Android, `.zip` khi chạy trên Windows.
+**Cách chính: `gh` CLI — một lệnh, upload được cả file lớn.**
 
-## (Tùy chọn) Tạo bộ cài đặt VieFlix-Setup.exe
+`gh` đã cài sẵn trên máy (19/08/2026, bản 2.97.0) tại `C:\Program Files\GitHub CLI\gh.exe`.
+`gh` KHÔNG bị giới hạn 10MB như công cụ `file_upload` của Claude, nên Claude tự đăng được trọn gói.
+
+```bash
+gh="C:/Program Files/GitHub CLI/gh.exe"
+"$gh" release create v1.0.16 \
+  --repo TRUNGHOANGDATA/vieflix \
+  --title "VieFlix v1.0.16" \
+  --notes-file notes.md \
+  "installer/VieFlix-Setup-v1.0.16.exe" \
+  "VieFlix-TV.apk"
+```
+`gh release create` tự tạo tag trên repo đó, nên không gặp lỗi "tag name can't be blank" của giao diện web.
+
+⚠️ **Kiểm `gh auth status` TRƯỚC.** Nếu chưa đăng nhập thì **phải nhờ user chạy `gh auth login`** (chọn GitHub.com → HTTPS → Yes → Login with a web browser). Claude KHÔNG được nhập tài khoản/token hộ user, và `gh auth login` là lệnh hỏi-đáp tương tác nên môi trường của Claude cũng không chạy được. Tính tới 19/08/2026 **vẫn chưa đăng nhập** — nên lần tới vẫn phải hỏi user trước.
+
+**Cách dự phòng: user tự đăng bằng trình duyệt.**
+Dùng khi `gh` chưa đăng nhập. (Đã thử điều khiển Chrome qua `claude-in-chrome` ngày 19/08/2026 — extension báo *not connected*, nên đừng mặc định trông vào đường này.) Đưa user link + nội dung sẵn để dán:
+1. `https://github.com/TRUNGHOANGDATA/vieflix/releases/new`
+2. Dropdown **Select tag** → gõ `vX.Y.Z` → **Create new tag** → **bấm nút Create trong hộp thoại** (RẤT DỄ SÓT — thiếu nó Publish báo lỗi "tag name can't be blank").
+3. **Title**: `VieFlix vX.Y.Z`; dán ghi chú vào ô mô tả.
+4. Đính **CẢ HAI** file ở khung *Attach binaries* → đợi 100% → **Publish release**.
+
+### 6. Kiểm lại sau khi đăng (BẮT BUỘC)
+Đăng xong phải xác nhận bằng API, đừng tin vào cảm giác:
+```bash
+curl -s "https://api.github.com/repos/TRUNGHOANGDATA/vieflix/releases/latest" \
+  | grep -E '"tag_name"|"name":'
+# Link cố định cho TV phải redirect sang đúng tag mới:
+curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" \
+  "https://github.com/TRUNGHOANGDATA/vieflix/releases/latest/download/VieFlix-TV.apk"
+```
+Phải thấy đủ **2 asset** (`VieFlix-Setup-vX.Y.Z.exe` + `VieFlix-TV.apk`) và link trên trả về `302` trỏ vào tag mới.
+
+Nếu release đã publish mà CHƯA kèm file: app không lỗi (updater rơi về mở trang release — xem `update_checker.dart`), nhưng user bấm "Cập nhật" sẽ thấy trang trống. Đính file càng sớm càng tốt.
+
+App tự cập nhật chọn `.apk` khi chạy Android, `.exe` (bộ cài) khi chạy Windows.
+
+## Tạo bộ cài đặt VieFlix-Setup.exe — ĐÂY LÀ CÁCH CHÍNH cho Windows
 Nếu user muốn "bộ cài như phần mềm thật" (wizard, shortcut Desktop/Start Menu, gỡ trong Add/Remove Programs) thì dùng **Inno Setup** thay vì zip.
 - Trình biên dịch: `C:\Users\WINDFURY1010\AppData\Local\Programs\Inno Setup 6\ISCC.exe` (đã cài sẵn qua winget id `JRSoftware.InnoSetup`).
 - Script: `installer\VieFlix.iss` (đã có sẵn, wizard tiếng Việt, icon `windows\runner\resources\app_icon.ico`).
