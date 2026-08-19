@@ -377,7 +377,6 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => PlayerScreen(
         movieName: d.name,
-        posterUrl: d.posterUrl.isNotEmpty ? d.posterUrl : d.thumbUrl,
         embedUrl: ep.embed,
         episodes: eps,
         startIndex: eps.indexOf(ep),
