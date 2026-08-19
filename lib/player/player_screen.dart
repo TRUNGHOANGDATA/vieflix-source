@@ -5,12 +5,12 @@ import 'dart:io' show Platform, File, FileMode;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../main.dart' show webViewEnvironment;
 import '../models/episode.dart';
 import '../theme/app_theme.dart';
 import 'ad_blocker.dart';
+import 'channel_bug.dart';
 
 // Tên tập hiển thị: tránh "Tập Tập 01" khi nguồn đã có sẵn chữ "Tập"
 String _epDisplay(String name) {
@@ -82,7 +82,7 @@ const String kPlayerBridgeScript = r'''
 ''';
 
 class PlayerScreen extends StatefulWidget {
-  final String movieName, posterUrl, embedUrl;
+  final String movieName, embedUrl;
   final List<Episode> episodes;
   final int startIndex;
   final int totalEpisodes; // tổng số tập full của phim (kể cả chưa ra)
@@ -92,7 +92,6 @@ class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
     required this.movieName,
-    required this.posterUrl,
     required this.embedUrl,
     required this.episodes,
     required this.startIndex,
@@ -115,6 +114,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _paused = false;       // trạng thái phát
   double _pos = 0, _dur = 0;  // vị trí / tổng thời lượng (giây)
   Timer? _hideT, _pollT;
+
+  /// Số giây hiện thanh điều khiển khi MỚI mở phim / vừa đổi tập.
+  /// Phim tràn kín màn nên không còn thanh đen cố định: nếu không tự hiện lúc
+  /// đầu thì người dùng chuột (PC) không biết nút Thoát / chuyển tập ở đâu.
+  static const int _introBarSeconds = 5;
 
   // Hết tập -> đếm ngược rồi tự chuyển sang tập kế tiếp.
   static const int _autoNextSeconds = 8;
@@ -142,12 +146,25 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.addObserver(this);
     // Cập nhật vị trí phát để vẽ thanh tiến trình.
     _pollT = Timer.periodic(const Duration(seconds: 1), (_) => _syncState());
+    // Android: ẩn thanh trạng thái / thanh điều hướng cho phim thật sự kín màn.
+    if (Platform.isAndroid) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    }
+    // Hiện thanh điều khiển mấy giây đầu (gán trực tiếp: đang trong initState nên
+    // KHÔNG được gọi setState).
+    _showBar = true;
+    _armHideBar(_introBarSeconds);
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
     WidgetsBinding.instance.removeObserver(this);
+    // Trả lại thanh trạng thái / điều hướng cho các màn còn lại.
+    if (Platform.isAndroid) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+          overlays: SystemUiOverlay.values);
+    }
     // Lưu nốt vị trí cuối cùng khi thoát trình phát.
     _flushPosition();
     _hideT?.cancel();
@@ -259,14 +276,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     if (mounted) setState(() => _nextIn = null);
   }
 
+  /// Hẹn giờ tự ẩn thanh điều khiển sau [seconds] giây (đặt lại nếu đang hẹn).
+  void _armHideBar([int seconds = 3]) {
+    _hideT?.cancel();
+    _hideT = Timer(Duration(seconds: seconds), () {
+      if (mounted) setState(() => _showBar = false);
+    });
+  }
+
   /// Hiện thanh điều khiển rồi tự ẩn sau 3 giây.
   void _bumpBar() {
     _syncState();
     if (!_showBar && mounted) setState(() => _showBar = true);
-    _hideT?.cancel();
-    _hideT = Timer(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _showBar = false);
-    });
+    _armHideBar();
   }
 
   bool _onKey(KeyEvent e) {
@@ -335,7 +357,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       _nextIn = null;
       _pos = 0;
       _dur = 0;
+      _showBar = true; // đổi tập -> hiện thanh cho thấy đang ở tập nào
     });
+    _armHideBar(_introBarSeconds);
     widget.onEpisodeChange(ep);
     _c?.loadUrl(urlRequest: URLRequest(url: WebUri(ep.embed)));
   }
@@ -344,79 +368,43 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Widget build(BuildContext context) {
     final total = widget.totalEpisodes > widget.episodes.length ? widget.totalEpisodes : widget.episodes.length;
     final epName = widget.episodes.isNotEmpty ? widget.episodes[_idx].name : '';
+    // Nhãn tập cho logo góc. Phim lẻ -> để rỗng, logo chỉ hiện tên phim.
+    final epLabel = total > 1 ? _epDisplay(epName) : '';
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Column(children: [
-          // Thanh trên: back + poster + tên đầy đủ + Tập X/Y
-          Container(
-            color: Colors.black,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                tooltip: 'Thoát (ESC)',
-                onPressed: () => Navigator.pop(context),
-              ),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: CachedNetworkImage(
-                  imageUrl: widget.posterUrl,
-                  width: 40, height: 56, fit: BoxFit.cover,
-                  memCacheWidth: 120,
-                  placeholder: (c, _) => Container(width: 40, height: 56, color: kSurface),
-                  errorWidget: (c, _, __) => Container(width: 40, height: 56, color: kSurface, child: const Icon(Icons.movie, color: Colors.white24, size: 18)),
+      // KHÔNG bọc SafeArea ở ngoài: phim phải tràn kín màn, không chừa dải đen.
+      body: Stack(children: [
+        Positioned.fill(child: _webView()),
+        // Logo góc kiểu kênh truyền hình: nằm im góc trên-phải suốt cả phim, mờ
+        // 40%, sáng rõ khi thanh điều khiển hiện. Các lớp bọc (SafeArea/Align/
+        // Padding) không "ăn" chuột, còn ChannelBug tự bọc IgnorePointer, nên bấm
+        // vào phim ở vùng góc vẫn ăn bình thường trên PC.
+        Positioned.fill(
+          child: SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                // Lề rộng để TV không cắt mất mép (overscan).
+                padding: const EdgeInsets.only(top: 16, right: 28),
+                child: ChannelBug(
+                  movieName: widget.movieName,
+                  episodeLabel: epLabel,
+                  bright: _showBar,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(widget.movieName,
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 2),
-                    Text(total > 1 ? '${_epDisplay(epName)} / $total' : 'Phim lẻ',
-                        style: const TextStyle(color: Colors.white60, fontSize: 13)),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Text(Platform.isAndroid ? 'Nhấn Back để thoát' : 'Nhấn ESC để thoát',
-                    style: const TextStyle(color: Colors.white24, fontSize: 12)),
-              ),
-            ]),
-          ),
-          Expanded(
-            child: Stack(children: [
-              Positioned.fill(child: _webView()),
-              // Thanh điều khiển của app (dành cho remote trên TV)
-              if (_showBar)
-                Positioned(
-                  left: 0, right: 0, bottom: 0,
-                  child: _controlBar(),
-                ),
-              // Hết tập -> hộp đếm ngược sang tập kế tiếp
-              if (_nextIn != null)
-                Positioned(right: 24, bottom: 24, child: _nextEpisodeBox()),
-            ]),
-          ),
-          // Thanh dưới: chuyển tập
-          if (widget.episodes.length > 1)
-            Container(
-              color: Colors.black,
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                IconButton(icon: const Icon(Icons.skip_previous, color: Colors.white), onPressed: _idx > 0 ? () => _goto(_idx - 1) : null),
-                Text('${_epDisplay(epName)} / $total', style: const TextStyle(color: Colors.white)),
-                IconButton(icon: const Icon(Icons.skip_next, color: Colors.white), onPressed: _idx < widget.episodes.length - 1 ? () => _goto(_idx + 1) : null),
-              ]),
             ),
-        ]),
-      ),
+          ),
+        ),
+        // Thanh điều khiển của app (remote trên TV + chuột trên PC)
+        if (_showBar)
+          Positioned(
+            left: 0, right: 0, bottom: 0,
+            child: _controlBar(epLabel, total),
+          ),
+        // Hết tập -> hộp đếm ngược sang tập kế tiếp (nhường chỗ cho thanh điều khiển)
+        if (_nextIn != null)
+          Positioned(right: 28, bottom: _showBar ? 132 : 28, child: _nextEpisodeBox()),
+      ]),
     );
   }
 
@@ -462,31 +450,69 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
-  /// Thanh điều khiển do APP vẽ: hiện khi bấm phím trên remote.
-  Widget _controlBar() {
+  /// Thanh điều khiển do APP vẽ: hiện khi bấm phím trên remote, khi mới mở phim
+  /// và khi vừa đổi tập.
+  ///
+  /// Từ khi phim tràn kín màn (bỏ 2 thanh đen cố định), thanh này gánh luôn nút
+  /// Thoát và nút chuyển tập — trước đây chúng nằm trên 2 thanh đó.
+  Widget _controlBar(String epLabel, int total) {
     final p = (_dur > 0) ? (_pos / _dur).clamp(0.0, 1.0) : 0.0;
+    final multi = widget.episodes.length > 1;
     return Container(
-      color: Colors.black.withValues(alpha: 0.75),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Row(children: [
-          Icon(_paused ? Icons.pause_circle_filled : Icons.play_circle_fill, color: kRed, size: 26),
-          const SizedBox(width: 10),
-          Text('${_fmt(_pos)} / ${_fmt(_dur)}',
-              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-          const Spacer(),
+      // Gradient thay khối đen đặc: không cắt ngang hình bằng một đường thẳng.
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Color(0xF2000000), Color(0x00000000)],
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 36, 24, 10),
+      child: SafeArea(
+        top: false,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            // Thoát: chuột bấm được trên PC; TV vẫn dùng Back/ESC là chính.
+            TextButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+              label: Text(Platform.isAndroid ? 'Thoát (Back)' : 'Thoát (ESC)',
+                  style: const TextStyle(color: Colors.white, fontSize: 13)),
+            ),
+            if (multi) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'Tập trước',
+                icon: const Icon(Icons.skip_previous, color: Colors.white),
+                onPressed: _idx > 0 ? () => _goto(_idx - 1) : null,
+              ),
+              Text('$epLabel / $total',
+                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+              IconButton(
+                tooltip: 'Tập sau',
+                icon: const Icon(Icons.skip_next, color: Colors.white),
+                onPressed: _idx < widget.episodes.length - 1 ? () => _goto(_idx + 1) : null,
+              ),
+            ],
+            const Spacer(),
+            Icon(_paused ? Icons.pause_circle_filled : Icons.play_circle_fill, color: kRed, size: 24),
+            const SizedBox(width: 8),
+            Text('${_fmt(_pos)} / ${_fmt(_dur)}',
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: p, minHeight: 5,
+              backgroundColor: Colors.white24, color: kRed,
+            ),
+          ),
+          const SizedBox(height: 6),
           const Text('◀ ▶ tua 10 giây   •   ▲ ▼ tua 1 phút   •   OK: tạm dừng   •   Back: thoát',
               style: TextStyle(color: Colors.white60, fontSize: 13)),
         ]),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: LinearProgressIndicator(
-            value: p, minHeight: 5,
-            backgroundColor: Colors.white24, color: kRed,
-          ),
-        ),
-      ]),
+      ),
     );
   }
 
