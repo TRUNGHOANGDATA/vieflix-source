@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
-/// Logo thương hiệu VieFlix: khối "play" squircle gradient (có gloss + quầng
-/// sáng) đứng cạnh wordmark "Vie" trắng + "Flix" gradient đỏ. Tách riêng để
-/// dùng lại ở thanh nav, splash, v.v.
+/// Logo thương hiệu VieFlix: khối "play" bo góc đỏ PHẲNG, tam giác play KHOÉT
+/// RỖNG (màu nền xuyên qua) đứng cạnh wordmark "Vie" trắng + "Flix" đỏ.
+///
+/// Cố tình KHÔNG dùng gradient / vệt gloss / quầng sáng / viền trong. Bản cũ xếp
+/// cả 4 hiệu ứng đó lên nhau, ở cỡ dùng thật (20–28px) chúng nhoè thành một khối
+/// đỏ mờ. Phẳng + khoét rỗng thì nét ở mọi cỡ.
+///
+/// Lưu ý về độ đậm: app chỉ nhúng 4 file Be Vietnam Pro (400/500/600/700), nên
+/// khai w800/w900 cũng chỉ ra đúng file Bold. Ghi thẳng w700 cho khớp thực tế.
 class BrandLogo extends StatelessWidget {
   final double height;
   const BrandLogo({super.key, this.height = 34});
@@ -11,38 +17,24 @@ class BrandLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mark = height;
-    final fs = height * 0.74;
     final word = TextStyle(
-      fontSize: fs,
-      fontWeight: FontWeight.w900,
-      letterSpacing: -0.5,
+      fontFamily: kBrandFont, // ghim: theme dùng Segoe UI trên Windows
+      fontSize: height * 0.72,
+      fontWeight: FontWeight.w700,
+      // Bản cũ dùng -0.5px cố định làm các chữ dính vào nhau ở cỡ nhỏ.
+      letterSpacing: height * 0.008,
       height: 1.0,
-      shadows: const [Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))],
+      shadows: const [Shadow(color: Colors.black54, blurRadius: 6, offset: Offset(0, 1))],
     );
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(
+      SizedBox(
         width: mark,
         height: mark,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(mark * 0.3),
-          boxShadow: [
-            BoxShadow(color: kRed.withValues(alpha: 0.55), blurRadius: 18, offset: const Offset(0, 5)),
-          ],
-        ),
         child: CustomPaint(painter: _PlayMark()),
       ),
-      SizedBox(width: mark * 0.34),
+      SizedBox(width: mark * 0.32),
       Text('Vie', style: word.copyWith(color: Colors.white)),
-      // "Flix" tô gradient đỏ (srcIn phủ chữ trắng bên dưới).
-      ShaderMask(
-        blendMode: BlendMode.srcIn,
-        shaderCallback: (r) => const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFF4E5E), kRed, Color(0xFFB00610)],
-        ).createShader(r),
-        child: Text('Flix', style: word.copyWith(color: Colors.white)),
-      ),
+      Text('Flix', style: word.copyWith(color: kRed)),
     ]);
   }
 }
@@ -50,61 +42,24 @@ class BrandLogo extends StatelessWidget {
 class _PlayMark extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final rr = RRect.fromRectAndRadius(rect, Radius.circular(size.width * 0.3));
-
-    canvas.save();
-    canvas.clipRRect(rr);
-    // Nền gradient chéo (đỏ tươi -> đỏ VieFlix -> đỏ thẫm) cho khối có chiều sâu.
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFF4E5E), Color(0xFFE50914), Color(0xFF8E0510)],
-          stops: [0.0, 0.55, 1.0],
-        ).createShader(rect),
-    );
-    // Vệt sáng gloss ở nửa trên.
-    final glossRect = Rect.fromLTWH(0, 0, size.width, size.height * 0.5);
-    canvas.drawRect(
-      glossRect,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.white.withValues(alpha: 0.30), Colors.white.withValues(alpha: 0.0)],
-        ).createShader(glossRect),
-    );
-    canvas.restore();
-
-    // Viền trong mảnh -> khối trông "chắc" và tách nền.
-    canvas.drawRRect(
-      rr.deflate(0.6),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..color = Colors.white.withValues(alpha: 0.18),
-    );
-
-    // Tam giác play trắng, bo góc mềm (fill + stroke round join).
     final w = size.width, h = size.height;
-    final s = w * 0.22;
-    final cx = w * 0.40, cy = h * 0.5; // lệch trái nhẹ cho cân mắt
+    final squircle = Path()
+      ..addRRect(RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(w * 0.28)));
+
+    // Tam giác play, lệch trái nhẹ cho cân mắt.
+    final s = w * 0.23;
+    final cx = w * 0.42, cy = h * 0.5;
     final tri = Path()
-      ..moveTo(cx - s * 0.75, cy - s)
-      ..lineTo(cx - s * 0.75, cy + s)
-      ..lineTo(cx + s, cy)
+      ..moveTo(cx - s * 0.72, cy - s)
+      ..lineTo(cx - s * 0.72, cy + s)
+      ..lineTo(cx + s * 0.95, cy)
       ..close();
-    canvas.drawPath(tri, Paint()..color = Colors.white);
+
+    // KHOÉT RỖNG: lấy hiệu hai hình rồi tô một lần -> chỗ tam giác không được tô,
+    // màu nền phía sau xuyên qua. Nét hơn hẳn việc vẽ tam giác trắng đè lên.
     canvas.drawPath(
-      tri,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = w * 0.11
-        ..strokeJoin = StrokeJoin.round,
+      Path.combine(PathOperation.difference, squircle, tri),
+      Paint()..color = kRed,
     );
   }
 

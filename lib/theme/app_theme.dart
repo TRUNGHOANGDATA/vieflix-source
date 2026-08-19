@@ -6,6 +6,12 @@ const kSurface = Color(0xFF23252F);
 const kRed = Color(0xFFE50914);
 const kAmber = Color(0xFFF5C518);   // vàng IMDb / số thứ tự Top
 
+/// Font đóng gói trong app (assets/fonts). Chữ THƯƠNG HIỆU (logo, logo góc khi
+/// xem phim) phải ghim vào font này thay vì để theo theme: theme dùng Segoe UI
+/// trên Windows nên nếu không ghim, logo sẽ ra hai kiểu chữ khác nhau giữa PC và
+/// TV. Chữ giao diện thường thì vẫn để theo theme như cũ.
+const kBrandFont = 'Be Vietnam Pro';
+
 final appTheme = ThemeData(
   brightness: Brightness.dark,
   scaffoldBackgroundColor: kBg,
