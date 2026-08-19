@@ -9,34 +9,53 @@ Widget _wrap(Widget child) => MaterialApp(
     );
 
 void main() {
-  testWidgets('wordmark IN HOA + dòng phim "tên · TẬP x" (số tập tự in hoa)',
+  testWidgets('IN HOA HẾT: tên phim truyền vào kiểu thường vẫn ra chữ hoa',
       (tester) async {
     await tester.pumpWidget(_wrap(
       const ChannelBug(movieName: 'Người Nhện', episodeLabel: 'Tập 5'),
     ));
     expect(find.text('VIEFLIX'), findsOneWidget);
-    expect(find.text('Người Nhện · TẬP 5'), findsOneWidget);
+    expect(find.text('NGƯỜI NHỆN'), findsOneWidget);
+    expect(find.text('TẬP 5'), findsOneWidget);
   });
 
   testWidgets('phim lẻ (không có nhãn tập): chỉ hiện tên phim, không có dấu ·',
       (tester) async {
     await tester.pumpWidget(_wrap(const ChannelBug(movieName: 'Bố Già')));
-    expect(find.text('Bố Già'), findsOneWidget);
+    expect(find.text('BỐ GIÀ'), findsOneWidget);
     expect(find.textContaining('·'), findsNothing);
   });
 
-  testWidgets('tương phản đậm/nhạt: wordmark w700, tên phim w500', (tester) async {
+  testWidgets('tương phản đậm/nhạt: wordmark to + w700, tên phim nhỏ hơn + w500, '
+      'số tập quay lại w700', (tester) async {
     await tester.pumpWidget(_wrap(
       const ChannelBug(movieName: 'Người Nhện', episodeLabel: 'Tập 5'),
     ));
     final mark = tester.widget<Text>(find.text('VIEFLIX'));
-    expect(mark.style?.fontWeight, FontWeight.w700);
-    // Cỡ chữ wordmark phải LỚN hơn dòng phim -> tạo bậc thị giác.
-    final progSpan = tester.widget<Text>(find.text('Người Nhện · TẬP 5')).textSpan!
-        as TextSpan;
-    final nameStyle = (progSpan.children!.first as TextSpan).style!;
-    expect(nameStyle.fontWeight, FontWeight.w500);
-    expect(mark.style!.fontSize!, greaterThan(nameStyle.fontSize!));
+    final name = tester.widget<Text>(find.text('NGƯỜI NHỆN'));
+    final ep = tester.widget<Text>(find.text('TẬP 5'));
+
+    expect(mark.style!.fontWeight, FontWeight.w700);
+    expect(name.style!.fontWeight, FontWeight.w500);
+    expect(ep.style!.fontWeight, FontWeight.w700);
+    // Wordmark phải LỚN hơn dòng phim -> tạo bậc thị giác.
+    expect(mark.style!.fontSize!, greaterThan(name.style!.fontSize!));
+    // Wordmark giãn chữ rộng hơn hẳn (kiểu bảng chữ nhà đài).
+    expect(mark.style!.letterSpacing!, greaterThan(name.style!.letterSpacing!));
+  });
+
+  testWidgets('tên phim dài: CẮT tên nhưng số tập vẫn hiện đủ', (tester) async {
+    await tester.pumpWidget(_wrap(const ChannelBug(
+      movieName: 'Vụ Án Bí Ẩn Ở Ngôi Làng Hẻo Lánh Phía Bắc Bán Đảo',
+      episodeLabel: 'Tập 12',
+    )));
+    // Số tập KHÔNG được bị cắt mất — đây là thứ người xem cần nhất.
+    expect(find.text('TẬP 12'), findsOneWidget);
+    final name = tester.widget<Text>(
+        find.text('VỤ ÁN BÍ ẨN Ở NGÔI LÀNG HẺO LÁNH PHÍA BẮC BÁN ĐẢO'));
+    expect(name.maxLines, 1);
+    expect(name.overflow, TextOverflow.ellipsis);
+    expect(tester.takeException(), isNull); // không vỡ layout
   });
 
   testWidgets('nằm im thì mờ, thanh điều khiển hiện thì sáng 100%', (tester) async {
@@ -84,17 +103,5 @@ void main() {
     await tester.tapAt(tester.getCenter(find.byType(ChannelBug)));
     await tester.pump();
     expect(tappedVideo, isTrue);
-  });
-
-  testWidgets('tên phim dài bị cắt 1 dòng, không tràn ngang che cảnh',
-      (tester) async {
-    await tester.pumpWidget(_wrap(const ChannelBug(
-      movieName: 'Vụ Án Bí Ẩn Ở Ngôi Làng Hẻo Lánh Phía Bắc Bán Đảo',
-      episodeLabel: 'Tập 12',
-    )));
-    final t = tester.widget<Text>(find.byType(Text).last);
-    expect(t.maxLines, 1);
-    expect(t.overflow, TextOverflow.ellipsis);
-    expect(tester.takeException(), isNull); // không vỡ layout
   });
 }

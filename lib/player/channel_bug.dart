@@ -42,9 +42,12 @@ class ChannelBug extends StatelessWidget {
     const prog = TextStyle(
       fontFamily: kBrandFont, // ghim để logo góc giống nhau trên PC và TV
       color: Colors.white,
-      fontSize: 12,
+      fontSize: 15,
       fontWeight: FontWeight.w500,
-      height: 1.15,
+      // 1.25 chứ không phải 1.15: chữ IN HOA tiếng Việt có dấu đội lên trên
+      // (Ư, Ệ, Ố...) nên cần thêm chỗ, không thì dấu chạm vào hairline.
+      height: 1.25,
+      letterSpacing: 0.8, // in hoa cần giãn nhẹ mới dễ đọc
       // Bóng đen: cảnh phim sáng thì chữ trắng vẫn đọc được.
       shadows: [Shadow(color: Colors.black, blurRadius: 6, offset: Offset(0, 1))],
     );
@@ -57,7 +60,8 @@ class ChannelBug extends StatelessWidget {
         duration: const Duration(milliseconds: 250),
         child: ConstrainedBox(
           // Tên phim dài phải cắt bớt, không thì tràn ngang che hết cảnh.
-          constraints: const BoxConstraints(maxWidth: 340),
+          // 430 (không phải 340) vì chữ đã to lên và IN HOA rộng hơn ~12%.
+          constraints: const BoxConstraints(maxWidth: 430),
           // IntrinsicWidth để hairline rộng đúng bằng dòng chữ dài nhất.
           child: IntrinsicWidth(
             child: Column(
@@ -67,41 +71,45 @@ class ChannelBug extends StatelessWidget {
                 Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                   // Tam giác vẽ bằng CustomPaint, KHÔNG dùng ký tự "▶": glyph phụ
                   // thuộc font, máy thiếu font là ra ô vuông.
-                  const SizedBox(width: 9, height: 11, child: CustomPaint(painter: _PlayTri())),
-                  const SizedBox(width: 7),
+                  const SizedBox(width: 12, height: 15, child: CustomPaint(painter: _PlayTri())),
+                  const SizedBox(width: 9),
                   const Text(
                     'VIEFLIX',
                     style: TextStyle(
                       fontFamily: kBrandFont,
                       color: Colors.white,
-                      fontSize: 15,
+                      fontSize: 21,
                       fontWeight: FontWeight.w700,
-                      letterSpacing: 2.4,
+                      letterSpacing: 3.4,
                       height: 1.0,
                       shadows: [Shadow(color: Colors.black, blurRadius: 6, offset: Offset(0, 1))],
                     ),
                   ),
                 ]),
-                const SizedBox(height: 5),
+                const SizedBox(height: 6),
                 // 0.5 chứ không phải 0.28: cả khối còn bị nhân với opacity 0.6 nữa
                 // nên 0.28 ra ~17% trắng, gần như tàng hình trên cảnh tối.
                 Container(height: 1, color: Colors.white.withValues(alpha: 0.5)),
-                const SizedBox(height: 4),
-                Text.rich(
-                  TextSpan(children: [
-                    TextSpan(text: movieName, style: prog),
-                    if (episodeLabel.isNotEmpty) ...[
-                      TextSpan(text: ' · ', style: prog.copyWith(color: Colors.white54)),
-                      TextSpan(
-                        text: episodeLabel.toUpperCase(),
-                        style: prog.copyWith(fontWeight: FontWeight.w700, letterSpacing: 0.4),
-                      ),
-                    ],
-                  ]),
-                  textAlign: TextAlign.right,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                const SizedBox(height: 5),
+                // Row + Flexible chứ KHÔNG phải một Text.rich: với tên phim dài,
+                // Text.rich cắt ở cuối nên mất luôn số tập ("· T…"). Tách ra thì
+                // tên phim co lại, còn số tập luôn hiện đủ — trên bug nhà đài số
+                // tập là thứ người xem cần nhất.
+                Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  Flexible(
+                    // IN HOA hết cho giống bảng chữ của nhà đài.
+                    child: Text(movieName.toUpperCase(),
+                        style: prog,
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  if (episodeLabel.isNotEmpty) ...[
+                    Text(' · ', style: prog.copyWith(color: Colors.white54)),
+                    Text(episodeLabel.toUpperCase(),
+                        style: prog.copyWith(fontWeight: FontWeight.w700, letterSpacing: 0.4)),
+                  ],
+                ]),
               ],
             ),
           ),
