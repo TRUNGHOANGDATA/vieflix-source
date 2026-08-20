@@ -614,8 +614,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   await f.writeAsString('$m\n', mode: FileMode.append);
                 } catch (_) {}
               },
-              // Sau khi trang tải xong: tự động phát (remote khó "bấm" nút play trong web).
+              // Sau khi trang tải xong thì TỰ TIÊM LẠI script bằng evaluateJavascript.
+              //
+              // ⚠️ BẮT BUỘC, đừng tưởng `initialUserScripts` ở trên là đủ: plugin
+              // flutter_inappwebview_windows 0.6.0 nhận initialUserScripts rồi cất
+              // vào `userOnlyScripts_` nhưng KHÔNG BAO GIỜ tiêm — hàm đọc ra
+              // (`getUserOnlyScriptsAt`) không được gọi ở đâu trong plugin. Nên trên
+              // Windows, cầu nối không tồn tại -> `window.__vfState` luôn rỗng ->
+              // app hiện 00:00/00:00 và pause/tua đều không ăn.
+              //
+              // Cầu nối có cờ `window.__vfBridge` nên tiêm lại nhiều lần vô hại;
+              // Android vẫn chạy bằng userScript như cũ.
               onLoadStop: (c, url) async {
+                try { await c.evaluateJavascript(source: kPlayerBridgeScript); } catch (_) {}
                 try { await c.evaluateJavascript(source: kAutoPlayScript); } catch (_) {}
                 _syncState();
               },
