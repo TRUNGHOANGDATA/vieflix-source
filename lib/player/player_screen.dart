@@ -374,6 +374,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// lần hai (tua 10 giây thành 20 giây) khi cả hai đường cùng nhận được.
   DateTime _lastFlutterKey = DateTime.fromMillisecondsSinceEpoch(0);
 
+  /// Đã bắt đầu thoát trình phát. ESC tới được app bằng HAI đường (Flutter và
+  /// trang web bắn qua console), đường console tới chậm hơn nên lọt qua cửa chặn
+  /// theo thời gian -> pop hai lần -> thoát luôn cả trang chi tiết, rơi về trang
+  /// chủ. Cờ này chốt lại: đã pop một lần thì không nhận phím nào nữa.
+  bool _exiting = false;
+
   bool _onKey(KeyEvent e) {
     if (e is! KeyDownEvent) return false;
     _lastFlutterKey = DateTime.now();
@@ -406,7 +412,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
+  /// Thoát trình phát. Mọi đường thoát (ESC, nút Thoát) phải đi qua đây để chốt
+  /// cờ TRƯỚC khi pop — ESC còn tới bằng đường console chậm hơn, không chốt là
+  /// nó pop tiếp trang chi tiết và rơi thẳng về trang chủ.
+  void _exit() {
+    if (_exiting || !mounted || !Navigator.canPop(context)) return;
+    _exiting = true;
+    Navigator.pop(context);
+  }
+
   bool _handleKey(LogicalKeyboardKey k) {
+    if (_exiting) return true; // đang thoát -> nuốt hết phím, không pop lần hai
     // Đang đếm ngược chuyển tập: OK = xem ngay, ▼ = huỷ (ở lại tập này).
     if (_nextIn != null) {
       if (k == LogicalKeyboardKey.select || k == LogicalKeyboardKey.enter ||
@@ -420,7 +436,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
     if (k == LogicalKeyboardKey.escape) {
       if (mounted && Navigator.canPop(context)) {
-        Navigator.pop(context);
+        _exit();
         return true;
       }
       return false;
@@ -596,7 +612,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           Row(children: [
             // Thoát: chuột bấm được trên PC; TV vẫn dùng Back/ESC là chính.
             TextButton.icon(
-              onPressed: () => Navigator.pop(context),
+              onPressed: _exit,
               icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
               label: Text(Platform.isAndroid ? 'Thoát (Back)' : 'Thoát (ESC)',
                   style: const TextStyle(color: Colors.white, fontSize: 13)),
