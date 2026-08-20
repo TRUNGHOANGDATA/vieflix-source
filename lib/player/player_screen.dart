@@ -32,6 +32,20 @@ String _epDisplay(String name) {
 const String kPlayerBridgeScript = r'''
 (function(){
   if (window.__vfBridge) return; window.__vfBridge = 1;
+  // GIẤU thanh điều khiển của trang nguồn (JWPlayer): app đã có thanh riêng
+  // (pause/tua/chuyển tập), để cả hai là hai thanh chồng nhau rất rối.
+  // Dùng CSS thay vì xoá phần tử: JWPlayer vẽ lại thanh thì CSS vẫn áp.
+  // Giữ .jw-display (nút play giữa màn + bấm vào hình để tạm dừng vẫn chạy).
+  try {
+    if (!document.getElementById('__vfHideCtl')) {
+      var st = document.createElement('style');
+      st.id = '__vfHideCtl';
+      st.textContent = '.jw-controlbar,.jw-nextup-container,.jw-rightclick,' +
+        '.jw-settings-menu{display:none !important;}' +
+        'video::-webkit-media-controls-enclosure{display:none !important;}';
+      (document.head || document.documentElement).appendChild(st);
+    }
+  } catch (e) {}
   function vid(){ return document.querySelector('video'); }
   function jw(){ try { return (typeof jwplayer==='function') ? jwplayer() : null; } catch(e){ return null; } }
   function act(cmd, delta){
@@ -65,6 +79,9 @@ const String kPlayerBridgeScript = r'''
   });
   setInterval(function(){
     var v=vid(); var s=null;
+    // Nguồn dùng <video controls> thuần (không qua JWPlayer): tắt bộ nút gốc
+    // của trình duyệt. Đặt trong nhịp lặp vì video có thể xuất hiện muộn.
+    try { if (v && v.controls) v.controls = false; } catch(e){}
     try {
       if (v && isFinite(v.duration) && v.duration>0){
         s={p:v.currentTime, d:v.duration, paused:v.paused?1:0, ended:v.ended?1:0};
@@ -209,14 +226,52 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _bumpBar();
   }
 
-  /// Đọc vị trí/thời lượng/trạng thái từ `window.__vfState` (do cầu nối gom về).
+  /// JS đọc trạng thái video: ưu tiên đọc THẲNG thẻ <video>/jwplayer ở khung
+  /// chính (nguồn đang dùng đặt video ở đó), chỉ rơi về `window.__vfState`
+  /// (do cầu nối gom từ iframe về) khi khung chính không có video.
+  static const String _kReadStateJs = r'''JSON.stringify((function(){
+    try {
+      var v = document.querySelector('video');
+      if (v && isFinite(v.duration) && v.duration > 0)
+        return {p:v.currentTime, d:v.duration, paused:v.paused?1:0, ended:v.ended?1:0};
+      if (typeof jwplayer === 'function') {
+        var p = jwplayer();
+        if (p && p.getDuration && p.getDuration() > 0) {
+          var st = p.getState();
+          return {p:p.getPosition(), d:p.getDuration(), paused:(st==='playing')?0:1, ended:(st==='complete')?1:0};
+        }
+      }
+    } catch (e) {}
+    return window.__vfState || null;
+  })())''';
+
+  /// Đọc vị trí/thời lượng/trạng thái video, mỗi giây một lần.
   Future<void> _syncState() async {
     if (!mounted || _c == null) return;
     try {
-      final r = await _c!.evaluateJavascript(source: 'JSON.stringify(window.__vfState||null)');
-      final raw = (r ?? '').toString();
-      if (raw.isEmpty || raw == 'null') return;
-      final m = jsonDecode(raw) as Map<String, dynamic>;
+      // TỰ LÀNH: cầu nối có thể chưa được tiêm — onLoadStop và initialUserScripts
+      // đều đã tỏ ra không đáng tin trên Windows (initialUserScripts thì plugin
+      // 0.6.0 nhận rồi bỏ quên, không bao giờ tiêm). Nên mỗi nhịp kiểm cờ
+      // __vfBridge, thiếu thì tiêm lại ngay tại đây. Tiêm lại nhiều lần vô hại
+      // (cầu nối có guard); kAutoPlayScript chỉ tiêm kèm lần đầu vì nó không có
+      // guard, tiêm lặp sẽ chồng setInterval.
+      final has = (await _c!.evaluateJavascript(source: '(window.__vfBridge===1)?1:0')).toString();
+      if (has != '1') {
+        await _c!.evaluateJavascript(source: kPlayerBridgeScript);
+        await _c!.evaluateJavascript(source: kAutoPlayScript);
+        return; // nhịp sau đọc được ngay
+      }
+      final r = await _c!.evaluateJavascript(source: _kReadStateJs);
+      // Nới cách giải mã: tuỳ nền tảng, evaluateJavascript trả Map sẵn, chuỗi
+      // JSON, hoặc chuỗi JSON bị bọc thêm một lớp nữa.
+      dynamic decoded = r;
+      for (var i = 0; i < 2 && decoded is String; i++) {
+        final s = decoded.trim();
+        if (s.isEmpty || s == 'null') return;
+        decoded = jsonDecode(s);
+      }
+      if (decoded is! Map) return;
+      final m = decoded.cast<String, dynamic>();
       final pos = (m['p'] is num) ? (m['p'] as num).toDouble() : 0.0;
       final dur = (m['d'] is num) ? (m['d'] as num).toDouble() : 0.0;
       final paused = m['paused'] == 1;
@@ -516,8 +571,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               ),
             ],
             const Spacer(),
-            Icon(_paused ? Icons.pause_circle_filled : Icons.play_circle_fill, color: kRed, size: 24),
-            const SizedBox(width: 8),
+            // NÚT tạm dừng/phát chứ không phải icon trang trí: thanh của nguồn
+            // đã bị giấu nên đây là nút pause duy nhất cho người dùng chuột.
+            // Icon theo HÀNH ĐỘNG sắp làm (đang dừng -> hiện ▶ để phát).
+            IconButton(
+              tooltip: _paused ? 'Phát (OK)' : 'Tạm dừng (OK)',
+              icon: Icon(_paused ? Icons.play_circle_fill : Icons.pause_circle_filled,
+                  color: kRed, size: 26),
+              onPressed: _togglePlay,
+            ),
+            const SizedBox(width: 4),
             Text('${_fmt(_pos)} / ${_fmt(_dur)}',
                 style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
           ]),
