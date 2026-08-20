@@ -276,6 +276,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     if (mounted) setState(() => _nextIn = null);
   }
 
+  /// Chuột động là hiện thanh điều khiển (giống mọi trình phát video). Cần thiết
+  /// vì từ khi phim tràn kín màn, không còn thanh cố định nào: người dùng chuột
+  /// mà không bấm phím thì sẽ không có cách nào gọi nút Thoát / chuyển tập ra.
+  /// Có chặn nhịp: chuột động cả chục lần mỗi giây, không thể setState từng lần.
+  DateTime _lastHover = DateTime.fromMillisecondsSinceEpoch(0);
+  void _onHover() {
+    final now = DateTime.now();
+    if (now.difference(_lastHover).inMilliseconds < 400) return;
+    _lastHover = now;
+    _bumpBar();
+  }
+
   /// Hẹn giờ tự ẩn thanh điều khiển sau [seconds] giây (đặt lại nếu đang hẹn).
   void _armHideBar([int seconds = 3]) {
     _hideT?.cancel();
@@ -329,6 +341,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
     if (k == LogicalKeyboardKey.mediaTrackNext) { _goto(_idx + 1); return true; }
     if (k == LogicalKeyboardKey.mediaTrackPrevious) { _goto(_idx - 1); return true; }
+    // Phím KHÔNG dùng tới (Menu, Info, phím màu... trên remote) vẫn cho hiện
+    // thanh điều khiển: trên TV đó là cách gọi thanh ra mà không làm gì khác.
+    _bumpBar();
     return false;
   }
 
@@ -373,7 +388,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     return Scaffold(
       backgroundColor: Colors.black,
       // KHÔNG bọc SafeArea ở ngoài: phim phải tràn kín màn, không chừa dải đen.
-      body: Stack(children: [
+      // MouseRegion opaque:false -> chỉ NGHE chuột đi qua, không chặn cú bấm
+      // xuống WebView (trang nguồn vẫn bấm được như cũ trên PC).
+      body: MouseRegion(
+        opaque: false,
+        onHover: (_) => _onHover(),
+        child: Stack(children: [
         Positioned.fill(child: _webView()),
         // Logo góc kiểu kênh truyền hình: nằm im góc trên-phải suốt cả phim, mờ
         // 40%, sáng rõ khi thanh điều khiển hiện. Các lớp bọc (SafeArea/Align/
@@ -403,8 +423,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           ),
         // Hết tập -> hộp đếm ngược sang tập kế tiếp (nhường chỗ cho thanh điều khiển)
         if (_nextIn != null)
-          Positioned(right: 28, bottom: _showBar ? 132 : 28, child: _nextEpisodeBox()),
-      ]),
+          Positioned(right: 28, bottom: _showBar ? 150 : 28, child: _nextEpisodeBox()),
+        ]),
+      ),
     );
   }
 
@@ -500,16 +521,33 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             Text('${_fmt(_pos)} / ${_fmt(_dur)}',
                 style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
           ]),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: LinearProgressIndicator(
-              value: p, minHeight: 5,
-              backgroundColor: Colors.white24, color: kRed,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text('◀ ▶ tua 10 giây   •   ▲ ▼ tua 1 phút   •   OK: tạm dừng   •   Back: thoát',
+          // Bấm/kéo để tua. BẮT BUỘC phải tua được: thanh này che thanh tua của
+          // trang nguồn khi hiện, nếu chỉ để hiển thị thì người dùng chuột mất
+          // luôn khả năng tua.
+          LayoutBuilder(builder: (ctx, c) {
+            void seekTo(double dx) {
+              if (_dur <= 0) return;
+              _cmd('seekto', (dx / c.maxWidth).clamp(0.0, 1.0) * _dur);
+              _bumpBar();
+            }
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (d) => seekTo(d.localPosition.dx),
+              onHorizontalDragUpdate: (d) => seekTo(d.localPosition.dx),
+              // Vùng bấm dày hơn vạch (vạch chỉ 5px) cho dễ trúng bằng chuột.
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: p, minHeight: 5,
+                    backgroundColor: Colors.white24, color: kRed,
+                  ),
+                ),
+              ),
+            );
+          }),
+          const Text('◀ ▶ tua 10 giây   •   ▲ ▼ tua 1 phút   •   OK: tạm dừng   •   Back: thoát   •   bấm vào vạch để tua',
               style: TextStyle(color: Colors.white60, fontSize: 13)),
         ]),
       ),
