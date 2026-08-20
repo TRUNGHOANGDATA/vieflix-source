@@ -46,6 +46,18 @@ const String kPlayerBridgeScript = r'''
       (document.head || document.documentElement).appendChild(st);
     }
   } catch (e) {}
+  // BẮN PHÍM VỀ APP. Trên Windows, WebView2 chiếm tiêu điểm bàn phím (nhất là
+  // sau khi bấm chuột vào hình) nên Flutter KHÔNG nhận được phím nào -> ESC,
+  // mũi tên, Space đều chết. Trang bắt keydown rồi đẩy ra console; app đọc lại
+  // trong onConsoleMessage (đường này nối thẳng vào WebView2, không cần tiêm
+  // script nên chắc chắn chạy — khác với callHandler vốn cần plugin script mà
+  // plugin Windows 0.6.0 không bao giờ tiêm).
+  // Chỉ NGHE ở pha capture, KHÔNG preventDefault -> không phá phím của trang.
+  try {
+    window.addEventListener('keydown', function(e){
+      try { console.log('VFKEY:' + e.key); } catch(err){}
+    }, true);
+  } catch (e) {}
   function vid(){ return document.querySelector('video'); }
   function jw(){ try { return (typeof jwplayer==='function') ? jwplayer() : null; } catch(e){ return null; } }
   function act(cmd, delta){
@@ -358,9 +370,43 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _armHideBar();
   }
 
+  /// Lúc Flutter xử lý phím gần nhất — để phím do trang bắn về không bị xử lý
+  /// lần hai (tua 10 giây thành 20 giây) khi cả hai đường cùng nhận được.
+  DateTime _lastFlutterKey = DateTime.fromMillisecondsSinceEpoch(0);
+
   bool _onKey(KeyEvent e) {
     if (e is! KeyDownEvent) return false;
-    final k = e.logicalKey;
+    _lastFlutterKey = DateTime.now();
+    return _handleKey(e.logicalKey);
+  }
+
+  /// Phím do TRANG WEB bắt được rồi bắn về qua console (xem kPlayerBridgeScript).
+  /// Ánh xạ `KeyboardEvent.key` sang phím của Flutter rồi dùng CHUNG một hàm xử
+  /// lý, để hai đường không bao giờ lệch hành vi nhau.
+  static const Map<String, LogicalKeyboardKey> _kPageKeyMap = {
+    'Escape': LogicalKeyboardKey.escape,
+    'ArrowLeft': LogicalKeyboardKey.arrowLeft,
+    'ArrowRight': LogicalKeyboardKey.arrowRight,
+    'ArrowUp': LogicalKeyboardKey.arrowUp,
+    'ArrowDown': LogicalKeyboardKey.arrowDown,
+    ' ': LogicalKeyboardKey.space,
+    'Enter': LogicalKeyboardKey.enter,
+    'MediaPlayPause': LogicalKeyboardKey.mediaPlayPause,
+    'MediaTrackNext': LogicalKeyboardKey.mediaTrackNext,
+    'MediaTrackPrevious': LogicalKeyboardKey.mediaTrackPrevious,
+  };
+
+  void _handlePageKey(String key) {
+    if (DateTime.now().difference(_lastFlutterKey).inMilliseconds < 300) return;
+    final k = _kPageKeyMap[key];
+    if (k != null) {
+      _handleKey(k);
+    } else {
+      _bumpBar(); // phím lạ -> ít nhất cũng gọi thanh điều khiển ra
+    }
+  }
+
+  bool _handleKey(LogicalKeyboardKey k) {
     // Đang đếm ngược chuyển tập: OK = xem ngay, ▼ = huỷ (ở lại tập này).
     if (_nextIn != null) {
       if (k == LogicalKeyboardKey.select || k == LogicalKeyboardKey.enter ||
@@ -670,6 +716,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               // Ghi dòng chẩn đoán VIEFLIX_DBG ra file để soi khi phim không tự chạy.
               onConsoleMessage: (c, msg) async {
                 final m = msg.message;
+                // Phím do trang bắn về (Windows: WebView2 giữ tiêu điểm bàn phím).
+                if (m.startsWith('VFKEY:')) {
+                  _handlePageKey(m.substring(6));
+                  return;
+                }
                 if (!m.startsWith('VIEFLIX_DBG')) return;
                 try {
                   final dir = await getApplicationSupportDirectory();
