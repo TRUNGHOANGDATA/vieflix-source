@@ -50,7 +50,8 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
 
   bool _onKey(KeyEvent e) {
     if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
-      if (mounted && Navigator.canPop(context)) {
+      // CHỈ màn đang ở TRÊN CÙNG được xử lý — xem chú thích ở detail_screen.
+      if (mounted && (ModalRoute.of(context)?.isCurrent ?? false) && Navigator.canPop(context)) {
         Navigator.pop(context);
         return true;
       }

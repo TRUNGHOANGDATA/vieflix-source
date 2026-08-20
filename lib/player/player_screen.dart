@@ -417,6 +417,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// nó pop tiếp trang chi tiết và rơi thẳng về trang chủ.
   void _exit() {
     if (_exiting || !mounted || !Navigator.canPop(context)) return;
+    // Cũng phải kiểm isCurrent như các màn khác: nếu có màn khác đang phủ lên
+    // trình phát thì phím ESC là của màn đó, không phải để thoát phim.
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
     _exiting = true;
     Navigator.pop(context);
   }

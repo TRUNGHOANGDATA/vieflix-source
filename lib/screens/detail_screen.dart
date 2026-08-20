@@ -38,7 +38,11 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
 
   bool _onKey(KeyEvent e) {
     if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
-      if (mounted && Navigator.canPop(context)) {
+      // CHỈ màn đang ở TRÊN CÙNG được xử lý. HardwareKeyboard gọi MỌI handler
+      // đã đăng ký (không dừng ở cái trả về true), nên thiếu kiểm isCurrent thì
+      // một cú ESC pop sạch cả chồng màn xếp dưới — đang xem phim bấm ESC là
+      // văng thẳng về trang chủ.
+      if (mounted && (ModalRoute.of(context)?.isCurrent ?? false) && Navigator.canPop(context)) {
         Navigator.pop(context);
         return true;
       }
