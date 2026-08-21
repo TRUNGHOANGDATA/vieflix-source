@@ -4,7 +4,7 @@
 ; ============================================================
 
 #define MyAppName "VieFlix"
-#define MyAppVersion "1.0.18"
+#define MyAppVersion "1.0.19"
 #define MyAppPublisher "VieFlix"
 #define MyAppExeName "VieFlix.exe"
 ; Thư mục chứa file đã build (đường dẫn tương đối tính từ file .iss này)
