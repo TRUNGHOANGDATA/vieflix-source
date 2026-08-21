@@ -76,6 +76,15 @@ const String kPlayerBridgeScript = r'''
       } else if (cmd==='seekto'){
         if (v && isFinite(v.duration)){ v.currentTime=Math.max(0,Math.min(v.duration, delta)); return; }
         var p5=jw(); if(p5&&p5.seek){ p5.seek(delta); }
+      } else if (cmd==='volume'){
+        // delta = 0..1 (tuyệt đối). 0 thì tắt tiếng luôn cho khỏi còn tiếng rít.
+        var vv = Math.max(0, Math.min(1, delta));
+        if (v){ v.muted = (vv<=0); v.volume = vv; return; }
+        var p6=jw();
+        if (p6&&p6.setVolume){ try{ p6.setMute(vv<=0); }catch(e2){} p6.setVolume(Math.round(vv*100)); }
+      } else if (cmd==='mute'){
+        if (v){ v.muted = !v.muted; return; }
+        var p7=jw(); if(p7&&p7.setMute){ p7.setMute(!p7.getMute()); }
       }
     } catch(e){}
   }
@@ -142,6 +151,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _showBar = false;      // đang hiện thanh điều khiển
   bool _paused = false;       // trạng thái phát
   double _pos = 0, _dur = 0;  // vị trí / tổng thời lượng (giây)
+
+  // Âm lượng (0..1). Thanh của trang nguồn đã bị giấu nên đây là chỗ chỉnh tiếng
+  // duy nhất trong app.
+  double _vol = 1.0;
+  /// Lúc người dùng vừa tự chỉnh tiếng — trong ~1 giây sau đó KHÔNG lấy mức từ
+  /// trang về nữa, kẻo nhịp đọc mỗi giây kéo con trượt giật về chỗ cũ khi đang kéo.
+  DateTime _lastVolChange = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _hideT, _pollT;
 
   /// Số giây hiện thanh điều khiển khi MỚI mở phim / vừa đổi tập.
@@ -232,6 +248,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   void _seek(double delta) { _cmd('seek', delta); _bumpBar(); }
 
+  /// Đặt mức tiếng (0..1). Cập nhật UI ngay rồi mới gửi lệnh xuống trang, để con
+  /// trượt không bị trễ theo độ chậm của WebView.
+  void _setVolume(double v) {
+    final nv = v.clamp(0.0, 1.0);
+    _lastVolChange = DateTime.now();
+    if (mounted) setState(() => _vol = nv);
+    _cmd('volume', nv);
+    _bumpBar();
+  }
+
+  /// Bấm nút loa: đang có tiếng thì tắt, đang tắt thì mở lại mức vừa phải.
+  void _toggleMute() => _setVolume(_vol > 0 ? 0 : 0.7);
+
   void _togglePlay() {
     _cmd('toggle');
     setState(() => _paused = !_paused);
@@ -245,12 +274,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     try {
       var v = document.querySelector('video');
       if (v && isFinite(v.duration) && v.duration > 0)
-        return {p:v.currentTime, d:v.duration, paused:v.paused?1:0, ended:v.ended?1:0};
+        return {p:v.currentTime, d:v.duration, paused:v.paused?1:0, ended:v.ended?1:0,
+                vol: v.muted ? 0 : v.volume};
       if (typeof jwplayer === 'function') {
         var p = jwplayer();
         if (p && p.getDuration && p.getDuration() > 0) {
           var st = p.getState();
-          return {p:p.getPosition(), d:p.getDuration(), paused:(st==='playing')?0:1, ended:(st==='complete')?1:0};
+          return {p:p.getPosition(), d:p.getDuration(), paused:(st==='playing')?0:1, ended:(st==='complete')?1:0,
+                  vol: (p.getMute && p.getMute()) ? 0 : ((p.getVolume ? p.getVolume() : 100) / 100)};
         }
       }
     } catch (e) {}
@@ -288,7 +319,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       final dur = (m['d'] is num) ? (m['d'] as num).toDouble() : 0.0;
       final paused = m['paused'] == 1;
       final ended = m['ended'] == 1;
-      if (mounted) setState(() { _pos = pos; _dur = dur; _paused = paused; });
+      // Mức tiếng: bỏ qua nếu người dùng vừa chỉnh (xem _lastVolChange).
+      final vol = (m['vol'] is num) ? (m['vol'] as num).toDouble().clamp(0.0, 1.0) : null;
+      final takeVol = vol != null &&
+          DateTime.now().difference(_lastVolChange).inMilliseconds > 1000;
+      if (mounted) {
+        setState(() {
+          _pos = pos;
+          _dur = dur;
+          _paused = paused;
+          if (takeVol) _vol = vol;
+        });
+      }
 
       // Xem tiếp: seek tới vị trí cũ. Nguồn phim hay reset về 0 sau khi tải, nên
       // ÉP seek NHIỀU LẦN cho tới khi vị trí "ăn" (hoặc thử đủ số lần thì thôi).
@@ -645,7 +687,34 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   color: kRed, size: 26),
               onPressed: _togglePlay,
             ),
-            const SizedBox(width: 4),
+            // Âm lượng: thanh của trang nguồn bị giấu nên đây là chỗ chỉnh tiếng
+            // duy nhất trong app (trước bản này người dùng phải ra mixer Windows).
+            IconButton(
+              tooltip: _vol > 0 ? 'Tắt tiếng' : 'Mở tiếng',
+              icon: Icon(
+                _vol <= 0
+                    ? Icons.volume_off
+                    : (_vol < 0.5 ? Icons.volume_down : Icons.volume_up),
+                color: Colors.white,
+                size: 22,
+              ),
+              onPressed: _toggleMute,
+            ),
+            SizedBox(
+              width: 110,
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 4,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                  activeTrackColor: Colors.white,
+                  inactiveTrackColor: Colors.white24,
+                  thumbColor: Colors.white,
+                ),
+                child: Slider(value: _vol, onChanged: _setVolume),
+              ),
+            ),
+            const SizedBox(width: 10),
             Text('${_fmt(_pos)} / ${_fmt(_dur)}',
                 style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
           ]),
