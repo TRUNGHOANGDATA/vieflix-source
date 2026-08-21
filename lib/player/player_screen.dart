@@ -63,12 +63,20 @@ const String kPlayerBridgeScript = r'''
   function act(cmd, delta){
     try {
       var v = vid();
+      // __vfUserPaused: ghi lại việc người dùng CHỦ ĐỘNG tạm dừng, để script ép
+      // tự phát biết mà thôi, không bật lại phim sau lưng người dùng.
       if (cmd==='toggle'){
-        if (v){ if(v.paused) v.play(); else v.pause(); return; }
-        var p=jw(); if(p&&p.getState){ if(p.getState()==='playing') p.pause(); else p.play(true); }
+        if (v){ if(v.paused){ window.__vfUserPaused=0; v.play(); } else { window.__vfUserPaused=1; v.pause(); } return; }
+        var p=jw();
+        if(p&&p.getState){
+          if(p.getState()==='playing'){ window.__vfUserPaused=1; p.pause(); }
+          else { window.__vfUserPaused=0; p.play(true); }
+        }
       } else if (cmd==='play'){
+        window.__vfUserPaused=0;
         if (v){ v.play(); return; } var p2=jw(); if(p2&&p2.play) p2.play(true);
       } else if (cmd==='pause'){
+        window.__vfUserPaused=1;
         if (v){ v.pause(); return; } var p3=jw(); if(p3&&p3.pause) p3.pause();
       } else if (cmd==='seek'){
         if (v && isFinite(v.duration)){ v.currentTime=Math.max(0,Math.min(v.duration, v.currentTime+delta)); return; }
@@ -298,8 +306,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       // __vfBridge, thiếu thì tiêm lại ngay tại đây. Tiêm lại nhiều lần vô hại
       // (cầu nối có guard); kAutoPlayScript chỉ tiêm kèm lần đầu vì nó không có
       // guard, tiêm lặp sẽ chồng setInterval.
-      final has = (await _c!.evaluateJavascript(source: '(window.__vfBridge===1)?1:0')).toString();
-      if (has != '1') {
+      // Dùng JSON.stringify chứ không trả số/boolean trần: evaluateJavascript mỗi
+      // nền tảng trả một kiểu (số, chuỗi, chuỗi có kèm dấu nháy), so sánh '1' hụt
+      // là tưởng cầu nối chưa có -> TIÊM LẠI MỖI GIÂY, mà mỗi lần tiêm lại là một
+      // interval ép-tự-phát mới đè lên lệnh tạm dừng của người dùng.
+      final probe = (await _c!.evaluateJavascript(source: 'JSON.stringify(window.__vfBridge===1)'))
+          .toString();
+      if (!probe.contains('true')) {
         await _c!.evaluateJavascript(source: kPlayerBridgeScript);
         await _c!.evaluateJavascript(source: kAutoPlayScript);
         return; // nhịp sau đọc được ngay

@@ -44,6 +44,12 @@ List<ContentBlocker> adContentBlockers() {
 /// phổ biến (jwplayer/video.js/plyr...) trong ~15s vì player khởi tạo bất đồng bộ.
 const String kAutoPlayScript = r'''
 (function () {
+  // CHỐNG CHẠY LẶP. Script này được tiêm nhiều lần (onLoadStop, và nhịp tự lành
+  // cầu nối), mà mỗi lần chạy là tạo thêm một setInterval ép phát. Interval sinh
+  // sau thấy video đang tạm dừng là ép phát lại -> người dùng bấm pause xong một
+  // lúc phim tự chạy. Trang mới (đổi tập) có window mới nên cờ tự reset.
+  if (window.__vfAutoPlay) return;
+  window.__vfAutoPlay = 1;
   function biggest(sel) {
     var els, best = null, area = 0;
     try { els = document.querySelectorAll(sel); } catch (e) { return null; }
@@ -120,6 +126,9 @@ const String kAutoPlayScript = r'''
   answerResumeDialog();
   var n = 0;
   var t = setInterval(function () {
+    // Người dùng chủ động tạm dừng (qua nút của app) -> THÔI ép phát ngay, kể cả
+    // khi phim chưa từng chạy. Cờ do cầu nối đặt, xem kPlayerBridgeScript.
+    if (window.__vfUserPaused) { clearInterval(t); return; }
     answerResumeDialog();
     // Khi video ĐÃ bắt đầu chạy -> NGỪNG ép phát, để không đè lên lệnh tạm dừng
     // của người dùng (trước đây pause xong bị script tự bật lại sau ~1 giây).
