@@ -33,9 +33,14 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   final _scroll = ScrollController();
   Timer? _debounce;
 
+  /// Giu san notifier cua co "dang go". Trong dispose() KHONG duoc dung `ref`
+  /// nua, nen phai bat san tu initState.
+  late final StateController<bool> _typingCtl;
+
   @override
   void initState() {
     super.initState();
+    _typingCtl = ref.read(searchTypingProvider.notifier);
     _scroll.addListener(() {
       if (_scroll.hasClients &&
           _scroll.position.pixels > _scroll.position.maxScrollExtent - 400) {
@@ -51,8 +56,12 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
     _fieldFocus.dispose();
     _searchBtnFocus.dispose();
     _scroll.dispose();
-    // Rời màn -> xoá cờ đang gõ để Shell không hiểu nhầm.
-    Future.microtask(() => ref.read(searchTypingProvider.notifier).state = false);
+    // Roi man -> xoa co dang go de Shell khong hieu nham.
+    // KHONG dung Future.microtask + ref: microtask chay SAU khi dispose xong nen
+    // `ref` da chet -> nem StateError va co KHONG BAO GIO duoc xoa (Shell tuong
+    // van dang go, bam Back o Trang chu khong thoat duoc app). Dung notifier da
+    // bat san tu initState thi khong phu thuoc widget con song hay khong.
+    _typingCtl.state = false;
     super.dispose();
   }
 
@@ -103,17 +112,32 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
 
     return FocusTraversalGroup(
       child: Column(children: [
-        Padding(padding: const EdgeInsets.fromLTRB(16, 14, 16, 6), child: _searchArea()),
-        TvFilterBar(
-          current: _q,
-          onChanged: (q) => setState(() {
-            _q = q;
-            // Chọn bộ lọc -> chuyển sang chế độ duyệt: xoá từ khoá đang tìm.
-            _keyword = '';
-            _controller.clear();
-          }),
+        // Ô TÌM + 4 Ô LỌC CHUNG MỘT HÀNG. Trước đây mỗi thứ một hàng riêng, cộng
+        // hàng loại tiếng nữa thì khối lọc ăn ~180px, mà màn 1080p chỉ còn ~890px
+        // cho nội dung -> hàng phim bị đẩy xuống và cắt mất nửa dưới (thấy rõ
+        // nhất trên TV vì TV còn cắt mép).
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+          child: Row(children: [
+            Expanded(flex: 4, child: _searchArea()),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 6,
+              child: TvFilterBar(
+                padding: EdgeInsets.zero,
+                current: _q,
+                onChanged: (q) => setState(() {
+                  _q = q;
+                  // Chọn bộ lọc -> chuyển sang chế độ duyệt: xoá từ khoá đang tìm.
+                  _keyword = '';
+                  _controller.clear();
+                }),
+              ),
+            ),
+          ]),
         ),
         LangFilterRow(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
           selected: _langs,
           onChanged: (s) => setState(() {
             _langs
@@ -156,7 +180,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
         scale: 1.0,
         onPressed: _startTyping,
         builder: (f) => Container(
-          height: 56,
+          height: 46,
           padding: const EdgeInsets.symmetric(horizontal: 18),
           alignment: Alignment.centerLeft,
           decoration: BoxDecoration(
@@ -204,10 +228,12 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   InputDecoration _fieldDecoration(String hint) => InputDecoration(
         hintText: hint,
         hintStyle: const TextStyle(color: Colors.white38),
-        prefixIcon: const Icon(Icons.search, color: Colors.white54, size: 26),
+        prefixIcon: const Icon(Icons.search, color: Colors.white54, size: 22),
         filled: true,
         fillColor: kSurface,
-        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        // 10 chu khong phai 16: o tim cao ~60px la qua nhieu cho mot man chi co
+        // ~890px chieu cao noi dung.
+        contentPadding: const EdgeInsets.symmetric(vertical: 10),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(30),
@@ -221,7 +247,11 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
 
   Widget _grid(List<Movie> items) => GridView.builder(
         controller: _scroll,
-        padding: const EdgeInsets.all(12),
+        // TV cat mep (overscan) nen hang cuoi bi mat mot phan neu sat vien ->
+        // chua le duoi/ngang rong hon han so voi PC.
+        padding: Platform.isAndroid
+            ? const EdgeInsets.fromLTRB(28, 8, 28, 40)
+            : const EdgeInsets.all(12),
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: 200, childAspectRatio: 0.6, crossAxisSpacing: 8, mainAxisSpacing: 8),
         itemCount: items.length,
@@ -260,7 +290,9 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
 
   // Chưa gõ + chưa lọc: hàng gợi ý phim cho đỡ trống.
   Widget _suggestHub() => FocusTraversalGroup(
-        child: ListView(padding: const EdgeInsets.only(top: 4, bottom: 28), children: [
+        child: ListView(
+            padding: EdgeInsets.only(top: 2, bottom: Platform.isAndroid ? 44 : 24),
+            children: [
           _suggestRow('🔥 Thịnh hành', topSeriesProvider,
               () => _browse('Phim Bộ', const BrowseQuery('type', 'phim-bo'))),
           _suggestRow('🆕 Mới cập nhật', latestListProvider,

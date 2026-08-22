@@ -13,13 +13,23 @@ import 'tv_focusable.dart';
 class TvFilterBar extends StatelessWidget {
   final BrowseQuery current;
   final ValueChanged<BrowseQuery> onChanged;
-  const TvFilterBar({super.key, required this.current, required this.onChanged});
+
+  /// Le ngoai. Man Thu vien nhung thanh nay vao chung mot hang voi o tim nen
+  /// truyen EdgeInsets.zero; man "Xem tat ca" giu nguyen le cu.
+  final EdgeInsets padding;
+
+  const TvFilterBar({
+    super.key,
+    required this.current,
+    required this.onChanged,
+    this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  });
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: padding,
       child: Row(children: [
         _btn(context, 'Loại', 'type', {for (final t in kTypes) t.slug: t.label}),
         _btn(context, 'Thể loại', 'genre', {for (final g in kGenres) g.slug: g.label}),

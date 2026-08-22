@@ -8,7 +8,16 @@ import 'tv_focusable.dart';
 class LangFilterRow extends StatelessWidget {
   final Set<String> selected; // chứa: phude / thuyetminh / longtieng
   final ValueChanged<Set<String>> onChanged;
-  const LangFilterRow({super.key, required this.selected, required this.onChanged});
+
+  /// Lề ngoài — màn Thư viện cần bó sát để khối lọc không ăn hết chiều cao.
+  final EdgeInsets padding;
+
+  const LangFilterRow({
+    super.key,
+    required this.selected,
+    required this.onChanged,
+    this.padding = const EdgeInsets.fromLTRB(16, 2, 16, 6),
+  });
 
   void _toggle(String? val) {
     final next = Set<String>.from(selected);
@@ -25,7 +34,7 @@ class LangFilterRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+        padding: padding,
         child: Row(children: [
           _chip('Mọi loại tiếng', null),
           _chip('Phụ đề', 'phude'),
