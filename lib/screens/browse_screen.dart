@@ -108,7 +108,12 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
     });
 
     final searching = _keyword.trim().length >= 2;
-    final browsing = _q.kind != 'all';
+    // Chọn LOẠI TIẾNG cũng tính là đang duyệt -> chuyển sang lưới có cuộn-tải-thêm.
+    // Trước đây chỉ bộ lọc Loại/Thể loại/Quốc gia/Năm mới chuyển, còn lọc tiếng
+    // thì vẫn hiện 2 hàng gợi ý và lọc trên đúng 20 phim đã tải -> chọn "Thuyết
+    // minh" xong chỉ còn 3 phim, trông như nguồn chỉ có 3 phim. Lưới thì gom
+    // nhiều trang (BrowseNotifier tải 3 trang/lượt) nên lọc ra đủ phim.
+    final browsing = _q.kind != 'all' || _langs.isNotEmpty;
 
     return FocusTraversalGroup(
       child: Column(children: [

@@ -57,6 +57,20 @@ void main() {
     expect(filters.left, greaterThan(field.right - 1));
   });
 
+  testWidgets('chọn lọc tiếng -> chuyển sang lưới cuộn-tải-thêm, KHÔNG lọc trên '
+      '20 phim gợi ý', (tester) async {
+    await pumpBrowse(tester);
+    // Ban đầu: hub gợi ý, chưa có lưới.
+    expect(find.byType(GridView), findsNothing);
+
+    await tester.tap(find.text('Thuyết minh'));
+    await tester.pumpAndSettle();
+
+    // Sau khi chọn: phải là lưới (nguồn của lưới gom nhiều trang nên lọc ra đủ
+    // phim, thay vì chỉ lọc trên 20 phim của hàng gợi ý).
+    expect(find.byType(GridView), findsOneWidget);
+  });
+
   testWidgets('cả khối lọc không được ăn quá 110px chiều cao — còn chỗ cho '
       'một hàng phim đầy đủ', (tester) async {
     await pumpBrowse(tester);
