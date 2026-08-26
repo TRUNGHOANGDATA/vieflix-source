@@ -155,11 +155,21 @@ class LocalStore {
     String name = '', String poster = '',
     double positionSeconds = 0, double durationSeconds = 0,
   }) async {
+    // Hàm này nghĩa là "đang xem tập nào", KHÔNG phải "tua về 0". Bấm phát lại
+    // đúng tập đang xem dở mà xoá vị trí thì lần mở sau mất chỗ — nên VẪN GIỮ
+    // vị trí cũ khi tập không đổi và người gọi không đưa vị trí mới.
+    final cur = _progress[slug];
+    final sameEpisode = cur != null && cur.episodeSlug == episodeSlug;
     _progress[slug] = WatchProgress(
       slug: slug, name: name.isNotEmpty ? name : slug, poster: poster,
       server: server, episodeSlug: episodeSlug,
       episodeName: episodeName, updatedAt: DateTime.now().millisecondsSinceEpoch,
-      positionSeconds: positionSeconds, durationSeconds: durationSeconds,
+      positionSeconds: positionSeconds > 0
+          ? positionSeconds
+          : (sameEpisode ? cur.positionSeconds : 0),
+      durationSeconds: durationSeconds > 0
+          ? durationSeconds
+          : (sameEpisode ? cur.durationSeconds : 0),
     );
     _capProgress();
     await _saveProgress();

@@ -37,4 +37,29 @@ void main() {
     expect(s.progressFor('x')!.episodeName, '3');
     expect(s.continueWatching.first.slug, 'y'); // lưu sau -> đứng trước
   });
+
+  test('saveProgress giữ vị trí cũ khi vẫn ở đúng tập đó', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = LocalStore();
+    await store.init();
+
+    await store.saveProgress(
+        slug: 'pa:phim', server: 'Vietsub', episodeSlug: 'tap-05',
+        episodeName: 'Tập 05', name: 'Phim');
+    await store.savePosition('pa:phim', 600, 2400);
+    expect(store.progressFor('pa:phim')!.positionSeconds, 600);
+
+    // Bấm phát lại ĐÚNG tập đó -> không được xoá chỗ đang xem dở.
+    await store.saveProgress(
+        slug: 'pa:phim', server: 'Vietsub', episodeSlug: 'tap-05',
+        episodeName: 'Tập 05', name: 'Phim');
+    expect(store.progressFor('pa:phim')!.positionSeconds, 600);
+    expect(store.progressFor('pa:phim')!.durationSeconds, 2400);
+
+    // Sang tập KHÁC thì phải về 0.
+    await store.saveProgress(
+        slug: 'pa:phim', server: 'Vietsub', episodeSlug: 'tap-06',
+        episodeName: 'Tập 06', name: 'Phim');
+    expect(store.progressFor('pa:phim')!.positionSeconds, 0);
+  });
 }

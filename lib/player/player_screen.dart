@@ -181,6 +181,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   final List<StreamSubscription> _nsubs = [];
   bool _native = false;      // đang phát bằng player native hay WebView
   bool _hlsFailed = false;   // hls lỗi -> đã rơi về embed, đừng thử lại vòng vo
+  double _pendingSeek = 0;   // giây cần tua tới NGAY KHI player sẵn sàng
+  int _seekTries = 0;
 
   /// Chỉ bật native trên Windows. Android/TV vẫn đi đường WebView cho tới khi
   /// đo được dung lượng APK (libmpv làm gói phình ~50MB).
@@ -322,7 +324,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }));
     _nsubs.add(p.stream.duration.listen((d) {
       if (!mounted || !_native) return;
-      setState(() => _dur = d.inMilliseconds / 1000.0);
+      final dur = d.inMilliseconds / 1000.0;
+      setState(() => _dur = dur);
+      // Tua ĐÚNG LÚC NÀY chứ không phải ngay sau open(): với HLS, mpv nuốt lệnh
+      // tua phát ra trước khi nó đọc xong playlist — đo thật thì phim vẫn nằm ở
+      // giây thứ 4 thay vì nhảy tới phút 10.
+      _applyPendingSeek();
     }));
     _nsubs.add(p.stream.playing.listen((v) {
       if (!mounted || !_native) return;
@@ -338,19 +345,48 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       _fallbackToEmbed(e);
     }));
 
+    _pendingSeek = startAt;
+    _seekTries = 0;
     try {
       await p.open(Media(url), play: true);
       await p.setVolume(_vol * 100);
-      if (startAt > 2) {
-        await p.seek(Duration(milliseconds: (startAt * 1000).round()));
-      }
-      _resumeApplied = true; // player native seek một phát là ăn, khỏi ép lại
+      _resumeApplied = true; // đường native tự lo bằng _applyPendingSeek
     } catch (e) {
       if (mounted) _fallbackToEmbed('$e');
     }
   }
 
+  /// Tua tới chỗ đang xem dở, và KIỂM LẠI xem có tới nơi thật không.
+  /// mpv thỉnh thoảng vẫn nuốt lệnh tua đầu tiên trên luồng mạng, nên thử tối đa
+  /// 3 lần rồi thôi — thà phát từ đầu còn hơn tua loạn cả buổi.
+  void _applyPendingSeek() {
+    final p = _np;
+    if (p == null || !_native) return;
+    final target = _pendingSeek;
+    if (target <= 2 || _dur <= 0) return;
+    if (target >= _dur - 5) {
+      _pendingSeek = 0; // chỗ lưu đã quá cuối phim -> bỏ, xem từ đầu
+      return;
+    }
+    _seekTries++;
+    p.seek(Duration(milliseconds: (target * 1000).round()));
+    Future.delayed(const Duration(seconds: 3), () {
+      if (!mounted || !_native || _pendingSeek <= 2) return;
+      if ((_pos - target).abs() <= 15) {
+        _pendingSeek = 0; // đã tới nơi
+        return;
+      }
+      if (_seekTries >= 3) {
+        _pendingSeek = 0;
+        return;
+      }
+      _applyPendingSeek();
+    });
+  }
+
   void _closeNative() {
+    _pendingSeek = 0;
+    _seekTries = 0;
     for (final s in _nsubs) {
       s.cancel();
     }
