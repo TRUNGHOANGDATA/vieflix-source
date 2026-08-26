@@ -46,4 +46,24 @@ void main() {
     expect(d.servers.first.items.length, 2);
     expect(d.servers.first.items.first.embed, 'http://e/1');
   });
+
+  group('qualityTag - lọc chất lượng chung cho cả hai nguồn', () {
+    Movie q(String quality) => Movie(
+          name: 'x', slug: 'x', originalName: '', thumbUrl: '', posterUrl: '',
+          description: '', quality: quality, language: '', currentEpisode: '',
+          totalEpisodes: 0,
+        );
+    test('gom về 3 mức, không rõ thì để rỗng', () {
+      expect(q('FHD').qualityTag, 'fhd');
+      expect(q('1080p').qualityTag, 'fhd');
+      expect(q('Bluray').qualityTag, 'fhd');
+      expect(q('HD').qualityTag, 'hd');       // nguonc hay ghi HD
+      expect(q('HDRip').qualityTag, 'hd');
+      expect(q('720p').qualityTag, 'hd');
+      expect(q('SD').qualityTag, 'sd');
+      expect(q('CAM').qualityTag, 'sd');
+      expect(q('').qualityTag, '');
+      expect(q('Đang cập nhật').qualityTag, '');
+    });
+  });
 }

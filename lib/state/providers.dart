@@ -1,13 +1,36 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../data/aggregate_source.dart';
+import '../data/movie_source.dart';
 import '../data/nguonc_api.dart';
+import '../data/phimapi_source.dart';
+import '../data/stream_sources.dart';
 import '../data/local_store.dart';
 import '../data/tmdb_api.dart';
 import '../data/update_checker.dart';
 import '../models/movie.dart';
 import '../models/movie_detail.dart';
 import '../models/paginated.dart';
+import '../models/stream_source.dart';
 
-final apiProvider = Provider<NguoncApi>((ref) => NguoncApi());
+/// Các nguồn ĐANG BẬT (override ở main từ store; đổi khi bật/tắt ở Cài đặt).
+final enabledSourcesProvider =
+    StateProvider<Set<String>>((ref) => {kSrcNguonc, kSrcPhimApi});
+
+/// Toàn bộ nguồn app biết, theo thứ tự ưu tiên khi gộp danh mục.
+final allSourcesProvider = Provider<List<MovieSource>>(
+    (ref) => [NguoncApi(), PhimApiSource()]);
+
+/// Nguồn phim app dùng: gộp các nguồn đang bật thành một danh mục.
+/// Chi tiết phim vẫn mở được từ MỌI nguồn (phim đã lưu không bị kẹt khi tắt nguồn).
+final apiProvider = Provider<MovieSource>((ref) {
+  final on = ref.watch(enabledSourcesProvider);
+  final all = ref.watch(allSourcesProvider);
+  final picked = all.where((s) => on.contains(s.id)).toList();
+  return AggregateSource(
+    picked.isEmpty ? [all.first] : picked,
+    detailSources: all,
+  );
+});
 
 /// Tăng giá trị này để buộc Trang chủ vẽ lại (sau khi xoá mục Xem tiếp...).
 final homeRefreshProvider = StateProvider<int>((ref) => 0);
@@ -163,6 +186,22 @@ final countryRowProvider = FutureProvider.family<List<Movie>, String>(
 final detailProvider = FutureProvider.family<MovieDetail, String>(
     (ref, slug) => ref.read(apiProvider).detail(slug));
 
+/// Lựa chọn phát LẤY THÊM từ các nguồn KHÁC (cùng bộ phim, tìm theo tên).
+///
+/// Tách riêng khỏi [detailProvider] để trang chi tiết hiện ngay bằng nguồn
+/// chính, nguồn phụ tìm được lúc nào thì thêm chip lúc đó.
+final alternateSourcesProvider =
+    FutureProvider.family<List<StreamSource>, String>((ref, slug) async {
+  final d = await ref.watch(detailProvider(slug).future);
+  final own = sourceOfSlug(slug);
+  final others = ref
+      .watch(allSourcesProvider)
+      .where((s) => s.id != own && ref.watch(enabledSourcesProvider).contains(s.id))
+      .toList();
+  if (others.isEmpty) return [];
+  return alternateStreamSources(primary: d, others: others);
+});
+
 // Ảnh nền độ phân giải cao (TMDB) cho banner trang chi tiết
 final backdropProvider = FutureProvider.family<String?, String>((ref, query) async {
   final key = ref.watch(tmdbKeyProvider);
@@ -177,18 +216,8 @@ final trailerProvider = FutureProvider.family<String?, String>((ref, query) asyn
   return TmdbApi(key).trailerKey(query);
 });
 
-// Bỏ dấu tiếng Việt để so sánh
-String _stripDiacritics(String s) {
-  const from = 'àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ';
-  const to   = 'aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd';
-  final buf = StringBuffer();
-  for (final ch in s.toLowerCase().runes) {
-    final c = String.fromCharCode(ch);
-    final i = from.indexOf(c);
-    buf.write(i >= 0 ? to[i] : c);
-  }
-  return buf.toString();
-}
+// Bỏ dấu tiếng Việt để so sánh (dùng chung với lớp nguồn phim).
+String _stripDiacritics(String s) => stripDiacritics(s);
 
 // Tên thể loại -> slug (vd "Cổ Trang" -> "co-trang")
 String _genreSlug(String s) => _stripDiacritics(s)
@@ -245,7 +274,7 @@ class BrowseState {
 }
 
 class BrowseNotifier extends StateNotifier<BrowseState> {
-  final NguoncApi api;
+  final MovieSource api;
   final BrowseQuery q;
   BrowseNotifier(this.api, this.q)
       : super(BrowseState(items: [], page: 0, totalPage: 1, loading: false)) {

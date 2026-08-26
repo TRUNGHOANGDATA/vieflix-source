@@ -2,7 +2,9 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:media_kit/media_kit.dart';
 import 'data/local_store.dart';
+import 'data/movie_source.dart';
 import 'state/providers.dart';
 import 'theme/app_theme.dart';
 import 'screens/shell.dart';
@@ -13,6 +15,8 @@ WebViewEnvironment? webViewEnvironment;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Trình phát native (dùng cho link m3u8). Gọi sớm vì nó nạp thư viện libmpv.
+  MediaKit.ensureInitialized();
   if (Platform.isWindows) {
     try {
       webViewEnvironment = await WebViewEnvironment.create(
@@ -30,6 +34,15 @@ Future<void> main() async {
     overrides: [
       storeProvider.overrideWithValue(store),
       tmdbKeyProvider.overrideWith((ref) => store.tmdbKey.isNotEmpty ? store.tmdbKey : kDefaultTmdbKey),
+      enabledSourcesProvider.overrideWith((ref) {
+        final off = store.disabledSources;
+        final on = ref
+            .watch(allSourcesProvider)
+            .map((s) => s.id)
+            .where((id) => !off.contains(id))
+            .toSet();
+        return on.isEmpty ? {kSrcNguonc} : on;
+      }),
     ],
     child: const MyApp(),
   ));

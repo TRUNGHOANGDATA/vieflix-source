@@ -6,6 +6,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/movie.dart';
 import '../models/movie_detail.dart';
 import '../models/episode.dart';
+import '../models/stream_source.dart';
+import '../data/stream_sources.dart';
 import '../state/providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_view.dart';
@@ -50,21 +52,10 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     return false;
   }
 
-  int _defaultServer(List<ServerGroup> servers) {
-    for (int i = 0; i < servers.length; i++) {
-      final n = servers[i].serverName.toLowerCase();
-      if (n.contains('thuyết minh') || n.contains('thuyet minh') ||
-          n.contains('lồng tiếng') || n.contains('long tieng')) {
-        return i;
-      }
-    }
-    return 0;
-  }
-
-  int _effServer(List<ServerGroup> servers) {
+  int _effServer(List<StreamSource> servers) {
     final u = _userServer;
     if (u != null && u >= 0 && u < servers.length) return u;
-    return _defaultServer(servers);
+    return defaultSourceIndex(servers);
   }
 
   // Tên tập hiển thị: KKPhim đã có sẵn "Tập 01", nguonc chỉ có "1" -> tránh "Tập Tập"
@@ -145,10 +136,17 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
   Widget _content(MovieDetail d) {
     final store = ref.watch(storeProvider);
     final fav = store.isFavorite(d.slug);
-    final servers = d.servers;
+    // Gộp mọi lựa chọn phát về MỘT danh sách phẳng: nguồn chính hiện ngay,
+    // nguồn khác (cùng phim, tìm theo tên) thêm vào khi tìm xong.
+    final alt = ref.watch(alternateSourcesProvider(widget.slug));
+    final servers = [
+      ...streamSourcesOf(d),
+      ...alt.maybeWhen(data: (l) => l, orElse: () => const <StreamSource>[]),
+    ];
+    final altLoading = alt.isLoading;
     final hasServer = servers.isNotEmpty;
     final srv = hasServer ? _effServer(servers) : 0;
-    final eps = hasServer ? _sorted(servers[srv].items) : <Episode>[];
+    final eps = hasServer ? _sorted(servers[srv].episodes) : <Episode>[];
     return ListView(padding: EdgeInsets.zero, children: [
       // Header điện ảnh: ảnh nền lớn + lớp mờ, poster & thông tin nổi lên trên.
       Stack(children: [
@@ -186,7 +184,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
               Row(children: [
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(backgroundColor: kRed, padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 16)),
-                  onPressed: hasServer ? () => _playSmart(d, servers[srv], eps) : null,
+                  onPressed: hasServer ? () => _playSmart(d, servers[srv], eps, servers, srv) : null,
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Xem ngay', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
@@ -244,12 +242,25 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: f ? kAmber : Colors.transparent, width: 2),
                     ),
-                    child: Text('${servers[i].serverName} · ${servers[i].items.length} tập',
+                    child: Text(
+                        '${servers[i].label} · ${servers[i].episodes.length} tập'
+                        '${servers[i].kind == StreamKind.hls ? ' · phát thẳng' : ''}',
                         style: TextStyle(
                             color: Colors.white,
                             fontSize: 13,
                             fontWeight: srv == i ? FontWeight.bold : FontWeight.normal)),
                   ),
+                ),
+              if (altLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    SizedBox(width: 12, height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white38)),
+                    SizedBox(width: 8),
+                    Text('đang tìm nguồn khác…',
+                        style: TextStyle(color: Colors.white38, fontSize: 12)),
+                  ]),
                 ),
             ]),
             const SizedBox(height: 10),
@@ -274,7 +285,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                   width: 72,
                   child: FocusHighlight(
                     scale: 1.0,
-                    onPressed: () => _play(d, servers[srv], eps, ep),
+                    onPressed: () => _play(d, servers[srv], eps, ep, all: servers, srvIndex: srv),
                     builder: (f) => Container(
                       height: 36,
                       alignment: Alignment.center,
@@ -349,18 +360,19 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     );
   }
 
-  Future<void> _saveAndRefresh(MovieDetail d, ServerGroup s, Episode ep, String poster) async {
+  Future<void> _saveAndRefresh(MovieDetail d, StreamSource s, Episode ep, String poster) async {
     // await để ghi xuống đĩa xong hẳn -> không mất khi đóng app đột ngột
     await ref.read(storeProvider).saveProgress(
         slug: d.slug, name: d.name, poster: poster,
-        server: s.serverName, episodeSlug: ep.slug, episodeName: ep.name);
+        server: s.label, episodeSlug: ep.slug, episodeName: ep.name);
     // Báo trang chủ cập nhật lại hàng "Xem tiếp" ngay
     ref.read(homeRefreshProvider.notifier).state++;
   }
 
   /// Bấm "Xem ngay": nếu phim đang xem dở thì HỎI xem tiếp tập cũ hay xem từ đầu.
   /// Nút "Xem tiếp" được chọn sẵn -> trên TV chỉ cần bấm OK.
-  Future<void> _playSmart(MovieDetail d, ServerGroup s, List<Episode> eps) async {
+  Future<void> _playSmart(MovieDetail d, StreamSource s, List<Episode> eps,
+      List<StreamSource> all, int srvIndex) async {
     if (eps.isEmpty) return;
     // App chỉ mở ĐÚNG TẬP đang xem dở. VỊ TRÍ trong tập do NGUỒN (nguonc) tự nhớ:
     // khi mở lại, trang nguồn hiện hộp "Bạn đã dừng lại ở ..." và app tự bấm
@@ -372,12 +384,24 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
       final i = eps.indexWhere((e) => e.slug == p.episodeSlug);
       if (i >= 0) idx = i;
     }
-    _play(d, s, eps, eps[idx]);
+    _play(d, s, eps, eps[idx], all: all, srvIndex: srvIndex);
   }
 
-  void _play(MovieDetail d, ServerGroup s, List<Episode> eps, Episode ep, {double startPosition = 0}) {
+  void _play(MovieDetail d, StreamSource s, List<Episode> eps, Episode ep,
+      {double startPosition = 0,
+      List<StreamSource> all = const [],
+      int srvIndex = 0}) {
     final poster = d.thumbUrl.isNotEmpty ? d.thumbUrl : d.posterUrl;
     _saveAndRefresh(d, s, ep, poster);
+    // Trình phát cần các tập ĐÃ SẮP XẾP của MỌI nguồn thì đổi nguồn giữa chừng
+    // mới nhảy đúng tập tương ứng.
+    final sorted = [
+      for (final x in all.isEmpty ? [s] : all)
+        StreamSource(
+          provider: x.provider, movieSlug: x.movieSlug, serverName: x.serverName,
+          lang: x.lang, kind: x.kind, episodes: _sorted(x.episodes),
+        )
+    ];
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => PlayerScreen(
         movieName: d.name,
@@ -386,7 +410,10 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         startIndex: eps.indexOf(ep),
         totalEpisodes: d.base.totalEpisodes > eps.length ? d.base.totalEpisodes : eps.length,
         startPosition: startPosition,
+        sources: sorted,
+        sourceIndex: srvIndex.clamp(0, sorted.length - 1),
         onEpisodeChange: (e) => _saveAndRefresh(d, s, e, poster),
+        onSourceChange: (src, e) => _saveAndRefresh(d, src, e, poster),
         onPosition: (pos, dur) => ref.read(storeProvider).savePosition(d.slug, pos, dur),
       ),
     ));

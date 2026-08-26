@@ -1,6 +1,7 @@
 # Kế hoạch: thêm nguồn phim thứ hai + đổi nguồn / đổi tiếng trong trình phát
 
-Ngày lập: 25/08/2026. Trạng thái: **chưa bắt đầu**, đang chờ chốt phạm vi.
+Ngày lập: 25/08/2026. Trạng thái: **xong P1 → P4**. P3 chỉ bật trên Windows
+(xem "Tình hình" ở cuối).
 
 ## Yêu cầu của user
 
@@ -111,3 +112,97 @@ class StreamSource {
 Làm **P1 → dừng lại kiểm** (xem chất lượng phim và độ ổn của nguồn mới) → P2 → P3.
 Lý do không làm P3 sớm: `media_kit` là thay đổi lớn nhất và tốn nhất, nên chỉ bỏ công
 sau khi đã biết chắc nguồn mới đáng giá.
+
+---
+
+## Tình hình (cập nhật 25/08/2026)
+
+### Đã xong
+
+**P1 — lớp nguồn + gộp danh mục.**
+`lib/data/movie_source.dart` (giao diện chung + lọc trùng), `phimapi_source.dart`,
+`aggregate_source.dart`. Bật/tắt nguồn ở Cài đặt; phim đã lưu vẫn mở được cả khi
+tắt nguồn (chi tiết đi theo `detailSources`, danh mục đi theo `sources`).
+
+**P2 — chọn nguồn + đổi nguồn trong trình phát.**
+`lib/models/stream_source.dart` + `lib/data/stream_sources.dart`. Trang chi tiết
+gộp mọi lựa chọn thành một danh sách phẳng, chip ghi `nguonc · Thuyết minh`.
+Trình phát có nút "Nguồn" mở bảng chọn (D-pad bấm được), đổi nguồn giữ nguyên tập
+và vị trí đang xem.
+
+**P4 — phần làm được ngay.**
+Tìm kiếm gộp hai nguồn + lọc trùng đã nằm sẵn trong P1. Thêm lọc theo chất lượng
+(`Movie.qualityTag`, `QualityFilterRow`) ở trang "Xem tất cả".
+**Không làm lọc theo IMDb**: chỉ phimapi trả điểm imdb, làm bộ lọc đó thì mọi phim
+nguonc biến mất — bộ lọc hỏng ngầm còn tệ hơn không có. App đã có điểm TMDB rồi.
+
+### Sửa được hai lỗi lộ ra khi chạy thật
+
+| Lỗi | Chi tiết |
+|---|---|
+| Tìm kiếm lọt phim trùng | Endpoint tìm kiếm của nguonc **không trả `year`**, mà khoá gộp lại là tên+năm. Đổi sang `MergeDedup`: thiếu năm ở một bên thì coi trùng tên là trùng phim |
+| "Hài" và "Viễn Tưởng" ra 0 phim | Slug thật của nguonc là `phim-hai` và `khoa-hoc-vien-tuong`, không phải `hai`/`vien-tuong`. Đây là lỗi CÓ SẴN từ trước, không phải do thêm nguồn. Đã map slug ở cả hai nguồn |
+
+### Đo thật với API (`dart run tool/smoke_sources.dart`)
+
+```
+latest p1          32 phim (nguonc 10 / phimapi 22)
+genre hai          17 phim (nguonc 10 / phimapi  7)   <- trước đây nguonc 0
+country han-quoc   12 phim (nguonc 10 / phimapi  2)   <- 8 phim trùng, đã kiểm tay: trùng thật
+
+Sếp Chính Là Thần Tượng (2026)
+   nguonc · Vietsub         8 tập  embed
+   nguonc · Thuyết minh     8 tập  embed
+   phimapi · Vietsub        7 tập  hls+embed
+   phimapi · Thuyết minh    7 tập  hls+embed
+   đổi nguồn: "nguonc · Vietsub" tập "2" -> "phimapi · Thuyết minh" tập "Tập 02"
+```
+
+46 test xanh, `flutter analyze` không lỗi.
+
+**P3 — trình phát native cho m3u8 (CHỈ Windows).**
+`media_kit` + `media_kit_video`. Phim có `link_m3u8` thì phát thẳng bằng libmpv,
+không qua trang embed. Dùng lại nguyên thanh điều khiển + logo góc đã có
+(`controls: NoVideoControls`), nên bỏ được cầu nối JS trên đường này.
+
+- `_canNative(ep)` = `Platform.isWindows && ep.m3u8.isNotEmpty` → Android/TV giữ
+  nguyên đường WebView, **APK không đổi dung lượng**.
+- Vị trí / thời lượng / trạng thái phát đọc từ luồng của player, không dò JS mỗi giây.
+- hls hỏng → `_fallbackToEmbed()` tự quay về `link_embed`, giữ chỗ đang xem.
+- Đổi tập là cho thử lại đường hls (tập trước hỏng không suy ra tập này hỏng).
+- Chọn nguồn mặc định (`defaultSourceIndex`): tiếng Việt trước, trong cùng loại
+  tiếng thì ưu tiên bản phát thẳng.
+
+### Đo dung lượng (điều kiện kế hoạch đặt ra trước khi làm P3)
+
+| | Trước | Sau |
+|---|---|---|
+| Gói cài Windows | ~33 MB | **80 MB** |
+| APK Android | không đổi | không đổi (native tắt trên Android) |
+
+Phình thêm ~47 MB: `libmpv-2.dll` 29, `libGLESv2.dll` 8, `vk_swiftshader.dll` 5,
+`d3dcompiler_47.dll` 5, còn lại là dll nhỏ.
+
+### Kiểm thật
+
+- `dart run tool/smoke_native.dart <m3u8>` → libmpv mở được link thật, đọc đúng
+  thời lượng 4258s (≈71 phút, khớp "70 phút/tập"), `playing: true`.
+- Bản Release chạy 15s ổn định, nạp đủ `libmpv-2.dll` + `WebView2Loader.dll`
+  (cả hai đường phát cùng có mặt), RAM ~157 MB.
+
+### Ghi chú môi trường
+
+`flutter build apk --release` trên máy này chết ở
+`java.io.IOException: Unable to establish loopback connection` — Gradle không mở nổi
+socket loopback. Lỗi xảy ra **trên code chưa sửa gì**, trong lẫn ngoài sandbox → lỗi
+môi trường máy. Vì vậy **bản Android chưa dựng thử lần nào** sau loạt thay đổi này.
+
+### Chưa làm — và vì sao
+
+**Không thêm `vsphim` (`v9.streamvsmov.com`) và `vicdn` (`vicdn.cc`).** Hai cái này
+không phải nguồn phim mà là **host phát**: chúng không có danh mục để hỏi
+(`latest`/`byGenre`/`search`...), `vicdn` chỉ là khuôn URL tra theo TMDB id. Cắm vào
+làm `MovieSource` thì mọi hàng phim sẽ rỗng. Muốn dùng thì phải mò ngược giao thức
+embed của chúng từ việc mổ xẻ `vieflix.top` — trang có `robots.txt` chặn ClaudeBot,
+nên không làm. Nguồn nào có API công khai thì cắm thêm rất nhanh vì lớp
+`MovieSource` đã dựng sẵn.

@@ -47,6 +47,7 @@ class LocalStore {
   static const _kFav = 'favorites_v1';
   static const _kProg = 'progress_v1';
   static const _kTmdb = 'tmdb_key';
+  static const _kSrcOff = 'sources_off_v1'; // các nguồn phim BỊ TẮT
   static const _maxProgress = 200; // Giữ 200 phim xem gần nhất
   late SharedPreferences _p;
   final List<Movie> _favorites = [];
@@ -120,6 +121,21 @@ class LocalStore {
   // --- Khóa TMDB (rating) ---
   String get tmdbKey => _p.getString(_kTmdb) ?? '';
   Future<void> setTmdbKey(String k) async => _p.setString(_kTmdb, k.trim());
+
+  // --- Nguồn phim bật/tắt ---
+  // Lưu danh sách nguồn BỊ TẮT: nguồn mới thêm về sau mặc định là BẬT.
+  Set<String> get disabledSources =>
+      (_p.getStringList(_kSrcOff) ?? const <String>[]).toSet();
+
+  Future<void> setSourceEnabled(String id, bool on) async {
+    final off = disabledSources;
+    if (on) {
+      off.remove(id);
+    } else {
+      off.add(id);
+    }
+    await _p.setStringList(_kSrcOff, off.toList());
+  }
 
   List<Movie> get favorites => List.unmodifiable(_favorites);
   bool isFavorite(String slug) => _favorites.any((m) => m.slug == slug);

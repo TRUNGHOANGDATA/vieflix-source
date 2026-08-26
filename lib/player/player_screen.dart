@@ -6,11 +6,15 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import '../main.dart' show webViewEnvironment;
 import '../models/episode.dart';
+import '../models/stream_source.dart';
 import '../theme/app_theme.dart';
 import 'ad_blocker.dart';
 import 'channel_bug.dart';
+import '../widgets/tv_focusable.dart';
 
 // Tên tập hiển thị: tránh "Tập Tập 01" khi nguồn đã có sẵn chữ "Tập"
 String _epDisplay(String name) {
@@ -135,6 +139,15 @@ class PlayerScreen extends StatefulWidget {
   final double startPosition; // giây: xem tiếp từ đâu (0 = từ đầu)
   final void Function(Episode) onEpisodeChange;
   final void Function(double pos, double dur)? onPosition; // lưu vị trí đang xem
+
+  /// Mọi lựa chọn phát của phim này (nguồn + loại tiếng). Rỗng = chỉ có một
+  /// nguồn, nút "Nguồn" không hiện.
+  final List<StreamSource> sources;
+  final int sourceIndex;
+
+  /// Báo về khi người xem đổi sang nguồn khác (để lưu đúng nguồn đang xem).
+  final void Function(StreamSource src, Episode ep)? onSourceChange;
+
   const PlayerScreen({
     super.key,
     required this.movieName,
@@ -145,6 +158,9 @@ class PlayerScreen extends StatefulWidget {
     required this.onEpisodeChange,
     this.startPosition = 0,
     this.onPosition,
+    this.sources = const [],
+    this.sourceIndex = 0,
+    this.onSourceChange,
   });
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -154,6 +170,31 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   InAppWebViewController? _c;
   late int _idx;
   late String _url;
+  late int _srcIdx;          // nguồn đang phát (chỉ số trong widget.sources)
+  bool _srcPanel = false;    // đang mở bảng chọn nguồn
+
+  // ---- Trình phát native (chỉ dùng khi có link m3u8) ----
+  // Có link video trực tiếp thì phát thẳng, khỏi qua trang embed: không quảng
+  // cáo, không cần cầu nối JS, vị trí xem đọc chính xác từng giây.
+  Player? _np;
+  VideoController? _nvc;
+  final List<StreamSubscription> _nsubs = [];
+  bool _native = false;      // đang phát bằng player native hay WebView
+  bool _hlsFailed = false;   // hls lỗi -> đã rơi về embed, đừng thử lại vòng vo
+
+  /// Chỉ bật native trên Windows. Android/TV vẫn đi đường WebView cho tới khi
+  /// đo được dung lượng APK (libmpv làm gói phình ~50MB).
+  bool _canNative(Episode ep) =>
+      Platform.isWindows && ep.m3u8.isNotEmpty && !_hlsFailed;
+
+  Episode? get _curEp =>
+      (_idx >= 0 && _idx < _eps.length) ? _eps[_idx] : null;
+
+  /// Danh sách tập của NGUỒN ĐANG PHÁT. Không truyền sources thì dùng danh sách
+  /// truyền thẳng vào như trước.
+  List<Episode> get _eps => widget.sources.isEmpty
+      ? widget.episodes
+      : widget.sources[_srcIdx].episodes;
 
   // Thanh điều khiển của APP (remote không bấm được nút bên trong trang web).
   bool _showBar = false;      // đang hiện thanh điều khiển
@@ -189,6 +230,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   void initState() {
     super.initState();
     _idx = widget.startIndex < 0 ? 0 : widget.startIndex;
+    _srcIdx = (widget.sources.isEmpty ||
+            widget.sourceIndex < 0 ||
+            widget.sourceIndex >= widget.sources.length)
+        ? 0
+        : widget.sourceIndex;
     _url = widget.embedUrl;
     _resumeTo = widget.startPosition;
     _resumeApplied = widget.startPosition <= 2;
@@ -197,8 +243,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     // Theo dõi vòng đời app: khi bị đưa xuống nền / đóng đột ngột thì lưu ngay
     // vị trí đang xem (dispose có thể không kịp chạy khi hệ thống kill app).
     WidgetsBinding.instance.addObserver(this);
-    // Cập nhật vị trí phát để vẽ thanh tiến trình.
+    // Cập nhật vị trí phát để vẽ thanh tiến trình (đường WebView).
     _pollT = Timer.periodic(const Duration(seconds: 1), (_) => _syncState());
+    // Có link m3u8 -> phát thẳng bằng player native.
+    final ep0 = _curEp;
+    if (ep0 != null && _canNative(ep0)) {
+      _native = true;
+      _openNative(ep0.m3u8, widget.startPosition);
+    }
     // Android: ẩn thanh trạng thái / thanh điều hướng cho phim thật sự kín màn.
     if (Platform.isAndroid) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -222,6 +274,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _flushPosition();
     _hideT?.cancel();
     _pollT?.cancel();
+    _closeNative();
     _nextT?.cancel();
     super.dispose();
   }
@@ -242,13 +295,132 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
+  // ================= Trình phát native (m3u8) =================
+
+  /// Mở link m3u8 bằng player native và bám vào các luồng trạng thái của nó.
+  /// Khác hẳn đường WebView: không phải dò bằng JS mỗi giây, player bắn thẳng
+  /// vị trí / thời lượng / trạng thái phát ra.
+  Future<void> _openNative(String url, double startAt) async {
+    _closeNative();
+    final p = Player();
+    final c = VideoController(p);
+    _np = p;
+    _nvc = c;
+
+    _nsubs.add(p.stream.position.listen((d) {
+      if (!mounted || !_native) return;
+      final pos = d.inMilliseconds / 1000.0;
+      setState(() => _pos = pos);
+      // Lưu vị trí xuống đĩa mỗi ~3 giây, giống đường WebView.
+      if (_dur > 0 && pos > 0) {
+        _saveTick++;
+        if (_saveTick >= 3) {
+          _saveTick = 0;
+          widget.onPosition?.call(pos, _dur);
+        }
+      }
+    }));
+    _nsubs.add(p.stream.duration.listen((d) {
+      if (!mounted || !_native) return;
+      setState(() => _dur = d.inMilliseconds / 1000.0);
+    }));
+    _nsubs.add(p.stream.playing.listen((v) {
+      if (!mounted || !_native) return;
+      setState(() => _paused = !v);
+    }));
+    _nsubs.add(p.stream.completed.listen((v) {
+      if (!mounted || !_native || !v) return;
+      _armAutoNext();
+    }));
+    // Host m3u8 hay đổi/hết hạn -> rơi về link embed thay vì đứng hình.
+    _nsubs.add(p.stream.error.listen((e) {
+      if (!mounted || !_native) return;
+      _fallbackToEmbed(e);
+    }));
+
+    try {
+      await p.open(Media(url), play: true);
+      await p.setVolume(_vol * 100);
+      if (startAt > 2) {
+        await p.seek(Duration(milliseconds: (startAt * 1000).round()));
+      }
+      _resumeApplied = true; // player native seek một phát là ăn, khỏi ép lại
+    } catch (e) {
+      if (mounted) _fallbackToEmbed('$e');
+    }
+  }
+
+  void _closeNative() {
+    for (final s in _nsubs) {
+      s.cancel();
+    }
+    _nsubs.clear();
+    _np?.dispose();
+    _np = null;
+    _nvc = null;
+  }
+
+  /// hls hỏng -> quay về trang embed của chính nguồn đó, giữ nguyên chỗ đang xem.
+  void _fallbackToEmbed(String why) {
+    if (_hlsFailed) return;
+    final ep = _curEp;
+    if (ep == null || ep.embed.isEmpty) return;
+    final keep = _pos;
+    _hlsFailed = true;
+    _closeNative();
+    setState(() {
+      _native = false;
+      _url = ep.embed;
+    });
+    _resumeTo = keep;
+    _resumeApplied = keep <= 2;
+    _resumeTries = 0;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      backgroundColor: kRed,
+      content: Text('Link phát trực tiếp lỗi — chuyển sang trang nguồn'),
+    ));
+  }
+
+  /// Khung hình của player native. Dùng lại đúng thanh điều khiển của app nên
+  /// tắt hết điều khiển sẵn có của media_kit.
+  Widget _nativeVideo() {
+    final c = _nvc;
+    if (c == null) {
+      return const ColoredBox(
+        color: Colors.black,
+        child: Center(child: CircularProgressIndicator(color: kRed)),
+      );
+    }
+    return Video(
+      controller: c,
+      controls: NoVideoControls,
+      fit: BoxFit.contain,
+      fill: Colors.black,
+    );
+  }
+
   // ------- Điều khiển video qua cầu nối (chạy được cả khi player nằm trong iframe) -------
   Future<void> _js(String code) async {
     try { await _c?.evaluateJavascript(source: code); } catch (_) {}
   }
 
   /// Gửi lệnh xuống mọi khung (khung chính + iframe con) qua postMessage.
+  /// Đang phát native thì đi thẳng vào player, khỏi qua cầu nối JS.
   void _cmd(String cmd, [double delta = 0]) {
+    final np = _np;
+    if (_native && np != null) {
+      switch (cmd) {
+        case 'toggle':
+          np.playOrPause();
+        case 'seek':
+          np.seek(Duration(milliseconds: ((_pos + delta) * 1000).round().clamp(0, 1 << 31)));
+        case 'seekto':
+          np.seek(Duration(milliseconds: (delta * 1000).round().clamp(0, 1 << 31)));
+        case 'volume':
+          np.setVolume(delta * 100);
+      }
+      return;
+    }
     _js('''(function(){var m={__vf:1,cmd:'$cmd',delta:$delta};
       try{window.postMessage(m,'*');}catch(e){}
       for(var i=0;i<window.frames.length;i++){try{window.frames[i].postMessage(m,'*');}catch(e){}}})();''');
@@ -298,6 +470,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   /// Đọc vị trí/thời lượng/trạng thái video, mỗi giây một lần.
   Future<void> _syncState() async {
+    // Native tự bắn trạng thái qua stream, không phải dò bằng JS.
+    if (_native) return;
     if (!mounted || _c == null) return;
     try {
       // TỰ LÀNH: cầu nối có thể chưa được tiêm — onLoadStop và initialUserScripts
@@ -376,7 +550,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// Bắt đầu đếm ngược chuyển tập (chỉ khi còn tập sau và chưa bị huỷ).
   void _armAutoNext() {
     if (_nextT != null || _nextBlocked) return;
-    if (_idx + 1 >= widget.episodes.length) return; // đang ở tập cuối
+    if (_idx + 1 >= _eps.length) return; // đang ở tập cuối
     setState(() => _nextIn = _autoNextSeconds);
     _nextT = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) { t.cancel(); return; }
@@ -531,19 +705,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   void _goto(int i) {
-    if (i < 0 || i >= widget.episodes.length) return;
-    final ep = widget.episodes[i];
+    if (i < 0 || i >= _eps.length) return;
+    final ep = _eps[i];
     // Sang tập mới -> xoá mọi trạng thái "hết tập" của tập cũ.
     _nextT?.cancel();
     _nextT = null;
     _nextBlocked = false;
+    _hlsFailed = false; // tập trước hỏng link thẳng không có nghĩa tập này hỏng
     // Sang tập mới -> xem từ đầu, không seek theo vị trí cũ nữa.
     _resumeTo = 0;
     _resumeApplied = true;
     _saveTick = 0;
     setState(() {
       _idx = i;
-      _url = ep.embed;
       _nextIn = null;
       _pos = 0;
       _dur = 0;
@@ -551,13 +725,113 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     });
     _armHideBar(_introBarSeconds);
     widget.onEpisodeChange(ep);
+    _loadEpisode(ep, 0);
+  }
+
+  /// Nạp một tập: ưu tiên link m3u8 (player native), không có thì trang embed.
+  void _loadEpisode(Episode ep, double startAt) {
+    if (_canNative(ep)) {
+      if (!_native) setState(() => _native = true);
+      _openNative(ep.m3u8, startAt);
+      return;
+    }
+    if (_native) {
+      _closeNative();
+      setState(() => _native = false);
+    }
+    setState(() => _url = ep.embed);
     _c?.loadUrl(urlRequest: URLRequest(url: WebUri(ep.embed)));
   }
 
+  /// Đổi sang nguồn khác, GIỮ NGUYÊN tập và vị trí đang xem.
+  ///
+  /// Hai nguồn đánh số tập khác nhau nên tập tương ứng tìm theo SỐ tập. Không
+  /// có tập đó bên kia thì báo và ở lại nguồn cũ — thà báo còn hơn phát nhầm.
+  void _switchSource(int i) {
+    if (i < 0 || i >= widget.sources.length) return;
+    setState(() => _srcPanel = false);
+    if (i == _srcIdx) return;
+
+    final from = widget.sources[_srcIdx];
+    final to = widget.sources[i];
+    final j = matchEpisodeIndex(from.episodes, _idx, to.episodes);
+    if (j == null) {
+      final epName = (_idx < from.episodes.length) ? from.episodes[_idx].name : '';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: kRed,
+        content: Text('Nguồn "${to.label}" chưa có $epName — vẫn giữ nguồn cũ'),
+      ));
+      return;
+    }
+
+    final ep = to.episodes[j];
+    // Xem tiếp đúng chỗ đang dở ở nguồn mới.
+    final keep = _pos;
+    _nextT?.cancel();
+    _nextT = null;
+    _nextBlocked = false;
+    _resumeTo = keep;
+    _resumeApplied = keep <= 2;
+    _resumeTries = 0;
+    _saveTick = 0;
+    setState(() {
+      _srcIdx = i;
+      _idx = j;
+      _nextIn = null;
+      _pos = keep;
+      _dur = 0;
+      _showBar = true;
+    });
+    _armHideBar(_introBarSeconds);
+    widget.onSourceChange?.call(to, ep);
+    // Đổi nguồn có thể đổi luôn cả kiểu phát (hls <-> embed).
+    _hlsFailed = false; // nguồn mới -> cho phép thử lại đường hls
+    _loadEpisode(ep, keep);
+  }
+
+  /// Bảng chọn nguồn: kiểu bảng của TvFilterBar, D-pad bấm được.
+  Widget _sourcePanel() => Positioned.fill(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _srcPanel = false),
+          child: Container(
+            color: const Color(0xCC000000),
+            alignment: Alignment.center,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 460),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: kSurface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Text('Chọn nguồn / loại tiếng',
+                    style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                const Text('Đổi nguồn vẫn giữ đúng tập và chỗ đang xem',
+                    style: TextStyle(color: Colors.white38, fontSize: 12)),
+                const SizedBox(height: 14),
+                for (int i = 0; i < widget.sources.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _SourceRow(
+                      src: widget.sources[i],
+                      selected: i == _srcIdx,
+                      autofocus: i == _srcIdx,
+                      onPressed: () => _switchSource(i),
+                    ),
+                  ),
+              ]),
+            ),
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
-    final total = widget.totalEpisodes > widget.episodes.length ? widget.totalEpisodes : widget.episodes.length;
-    final epName = widget.episodes.isNotEmpty ? widget.episodes[_idx].name : '';
+    final total = widget.totalEpisodes > _eps.length ? widget.totalEpisodes : _eps.length;
+    final epName = (_eps.isNotEmpty && _idx < _eps.length) ? _eps[_idx].name : '';
     // Nhãn tập cho logo góc. Phim lẻ -> để rỗng, logo chỉ hiện tên phim.
     final epLabel = total > 1 ? _epDisplay(epName) : '';
     return Scaffold(
@@ -569,7 +843,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         opaque: false,
         onHover: (_) => _onHover(),
         child: Stack(children: [
-        Positioned.fill(child: _webView()),
+        Positioned.fill(child: _native ? _nativeVideo() : _webView()),
         // Logo góc kiểu kênh truyền hình: nằm im góc trên-phải suốt cả phim, mờ
         // 40%, sáng rõ khi thanh điều khiển hiện. Các lớp bọc (SafeArea/Align/
         // Padding) không "ăn" chuột, còn ChannelBug tự bọc IgnorePointer, nên bấm
@@ -599,6 +873,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         // Hết tập -> hộp đếm ngược sang tập kế tiếp (nhường chỗ cho thanh điều khiển)
         if (_nextIn != null)
           Positioned(right: 28, bottom: _showBar ? 150 : 28, child: _nextEpisodeBox()),
+        // Bảng chọn nguồn nằm TRÊN CÙNG để nhận được phím/chuột.
+        if (_srcPanel) _sourcePanel(),
         ]),
       ),
     );
@@ -607,7 +883,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// Hộp "Tập tiếp theo" khi phim/tập vừa hết: đếm ngược rồi tự chuyển.
   /// Bấm chuột được (PC) và bấm OK trên remote được (TV).
   Widget _nextEpisodeBox() {
-    final next = _idx + 1 < widget.episodes.length ? widget.episodes[_idx + 1] : null;
+    final next = _idx + 1 < _eps.length ? _eps[_idx + 1] : null;
     if (next == null) return const SizedBox.shrink();
     return Container(
       width: 340,
@@ -653,7 +929,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// Thoát và nút chuyển tập — trước đây chúng nằm trên 2 thanh đó.
   Widget _controlBar(String epLabel, int total) {
     final p = (_dur > 0) ? (_pos / _dur).clamp(0.0, 1.0) : 0.0;
-    final multi = widget.episodes.length > 1;
+    final multi = _eps.length > 1;
     return Container(
       // Gradient thay khối đen đặc: không cắt ngang hình bằng một đường thẳng.
       decoration: const BoxDecoration(
@@ -687,10 +963,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               IconButton(
                 tooltip: 'Tập sau',
                 icon: const Icon(Icons.skip_next, color: Colors.white),
-                onPressed: _idx < widget.episodes.length - 1 ? () => _goto(_idx + 1) : null,
+                onPressed: _idx < _eps.length - 1 ? () => _goto(_idx + 1) : null,
               ),
             ],
             const Spacer(),
+            // Đổi nguồn / đổi tiếng. Chỉ hiện khi phim có nhiều hơn một lựa chọn.
+            if (widget.sources.length > 1) ...[
+              TextButton.icon(
+                onPressed: () {
+                  setState(() => _srcPanel = true);
+                  _hideT?.cancel(); // đang chọn nguồn thì đừng giấu thanh
+                },
+                icon: const Icon(Icons.swap_horiz, color: Colors.white, size: 20),
+                label: Text(widget.sources[_srcIdx].label,
+                    style: const TextStyle(color: Colors.white, fontSize: 13)),
+              ),
+              const SizedBox(width: 4),
+            ],
             // NÚT tạm dừng/phát chứ không phải icon trang trí: thanh của nguồn
             // đã bị giấu nên đây là nút pause duy nhất cho người dùng chuột.
             // Icon theo HÀNH ĐỘNG sắp làm (đang dừng -> hiện ▶ để phát).
@@ -849,5 +1138,52 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     // TV: chặn WebView "ăn" phím của remote — mọi phím do app xử lý, còn video
     // được điều khiển bằng JS. Trên PC vẫn cho bấm chuột vào trang như cũ.
     return Platform.isAndroid ? ExcludeFocus(child: IgnorePointer(child: w)) : w;
+  }
+}
+
+/// Một dòng trong bảng chọn nguồn. Tách riêng để có Focus rõ ràng cho remote TV.
+class _SourceRow extends StatelessWidget {
+  final StreamSource src;
+  final bool selected, autofocus;
+  final VoidCallback onPressed;
+  const _SourceRow({
+    required this.src,
+    required this.selected,
+    required this.autofocus,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FocusHighlight(
+      scale: 1.0,
+      autofocus: autofocus,
+      onPressed: onPressed,
+      builder: (f) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? kRed : kBg,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: f ? kAmber : Colors.white12, width: 2),
+        ),
+        child: Row(children: [
+          Icon(selected ? Icons.play_circle_fill : Icons.circle_outlined,
+              color: Colors.white70, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(src.label,
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
+              Text('${src.serverName} · ${src.episodes.length} tập',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            ]),
+          ),
+        ]),
+      ),
+    );
   }
 }

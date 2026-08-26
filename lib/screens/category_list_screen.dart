@@ -26,6 +26,7 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
   late BrowseQuery _q;
   String _keyword = '';
   final Set<String> _langs = {}; // rỗng = mọi loại; chứa: phude/thuyetminh/longtieng (chọn nhiều)
+  final Set<String> _quals = {}; // rỗng = mọi chất lượng; chứa: fhd/hd/sd
   Timer? _debounce;
 
   @override
@@ -66,13 +67,20 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
     });
   }
 
-  // Lọc theo loại tiếng (phía app). Chọn nhiều -> khớp 1 trong các loại đã chọn.
+  // Lọc theo loại tiếng + chất lượng (phía app). Trong cùng một nhóm là "hoặc",
+  // giữa hai nhóm là "và".
   List<Movie> _applyLang(List<Movie> items) {
-    if (_langs.isEmpty) return items;
-    return items.where((m) =>
-        (_langs.contains('phude') && m.hasPhuDe) ||
-        (_langs.contains('thuyetminh') && m.hasThuyetMinh) ||
-        (_langs.contains('longtieng') && m.hasLongTieng)).toList();
+    var out = items;
+    if (_langs.isNotEmpty) {
+      out = out.where((m) =>
+          (_langs.contains('phude') && m.hasPhuDe) ||
+          (_langs.contains('thuyetminh') && m.hasThuyetMinh) ||
+          (_langs.contains('longtieng') && m.hasLongTieng)).toList();
+    }
+    if (_quals.isNotEmpty) {
+      out = out.where((m) => _quals.contains(m.qualityTag)).toList();
+    }
+    return out;
   }
 
   Widget _grid(List<Movie> items) => GridView.builder(
@@ -115,6 +123,14 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
           selected: _langs,
           onChanged: (s) => setState(() {
             _langs
+              ..clear()
+              ..addAll(s);
+          }),
+        ),
+        QualityFilterRow(
+          selected: _quals,
+          onChanged: (s) => setState(() {
+            _quals
               ..clear()
               ..addAll(s);
           }),

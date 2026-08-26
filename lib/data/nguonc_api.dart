@@ -3,21 +3,29 @@ import 'package:http/http.dart' as http;
 import '../models/movie.dart';
 import '../models/movie_detail.dart';
 import '../models/paginated.dart';
+import 'movie_source.dart';
 
-class ApiException implements Exception {
-  final String message;
-  ApiException(this.message);
-  @override
-  String toString() => 'ApiException: $message';
-}
+export 'movie_source.dart' show ApiException;
 
-class NguoncApi {
+class NguoncApi implements MovieSource {
   final http.Client _client;
   static const _base = 'https://phim.nguonc.com/api';
   static const _ua =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
   NguoncApi({http.Client? client}) : _client = client ?? http.Client();
+
+  @override
+  String get id => kSrcNguonc;
+
+  /// Vài thể loại nguonc đặt slug KHÁC với tên thường gọi (và khác phimapi).
+  /// Không map thì các hàng này rỗng bên nguonc — trước giờ "Hài" và
+  /// "Viễn Tưởng" đúng là không ra phim nào.
+  static const _genreAlias = {
+    'hai': 'phim-hai',
+    'hai-huoc': 'phim-hai',
+    'vien-tuong': 'khoa-hoc-vien-tuong',
+  };
 
   Future<Map<String, dynamic>> _getJson(String path) async {
     Object? lastErr;
@@ -55,26 +63,34 @@ class NguoncApi {
     );
   }
 
+  @override
   Future<Paginated<Movie>> latest({int page = 1}) async =>
       _parseList(await _getJson('/films/phim-moi-cap-nhat?page=$page'));
 
+  @override
   Future<Paginated<Movie>> listByType(String type, {int page = 1}) async =>
       _parseList(await _getJson('/films/danh-sach/$type?page=$page'));
 
+  @override
   Future<Paginated<Movie>> byGenre(String slug, {int page = 1}) async =>
-      _parseList(await _getJson('/films/the-loai/$slug?page=$page'));
+      _parseList(await _getJson(
+          '/films/the-loai/${_genreAlias[slug] ?? slug}?page=$page'));
 
+  @override
   Future<Paginated<Movie>> byCountry(String slug, {int page = 1}) async =>
       _parseList(await _getJson('/films/quoc-gia/$slug?page=$page'));
 
+  @override
   Future<Paginated<Movie>> byYear(String year, {int page = 1}) async =>
       _parseList(await _getJson('/films/nam-phat-hanh/$year?page=$page'));
 
+  @override
   Future<List<Movie>> search(String keyword) async {
     final j = await _getJson('/films/search?keyword=${Uri.encodeQueryComponent(keyword)}');
     return _parseList(j).items;
   }
 
+  @override
   Future<MovieDetail> detail(String slug) async {
     final j = await _getJson('/film/$slug');
     final movie = (j['movie'] as Map?)?.cast<String, dynamic>();

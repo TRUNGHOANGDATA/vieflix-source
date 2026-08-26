@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../data/update_checker.dart';
 import '../data/update_flow.dart';
 import '../data/sync_service.dart';
+import '../data/movie_source.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -28,6 +29,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void dispose() {
     _ctrl.dispose();
     super.dispose();
+  }
+
+  /// Bật/tắt một nguồn phim. Luôn giữ ít nhất một nguồn để danh mục không rỗng.
+  Future<void> _toggleSource(String id, bool on) async {
+    final cur = ref.read(enabledSourcesProvider);
+    if (!on && cur.length <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        backgroundColor: kRed,
+        content: Text('Phải bật ít nhất một nguồn phim'),
+      ));
+      return;
+    }
+    final next = {...cur};
+    on ? next.add(id) : next.remove(id);
+    ref.read(enabledSourcesProvider.notifier).state = next;
+    await ref.read(storeProvider).setSourceEnabled(id, on);
   }
 
   /// Bấm "Kiểm tra cập nhật": hỏi GitHub xem có bản mới hơn không.
@@ -198,6 +215,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final hasKey = ref.watch(tmdbKeyProvider).isNotEmpty;
+    final enabled = ref.watch(enabledSourcesProvider);
     return ListView(padding: const EdgeInsets.all(24), children: [
       const Text('Cài đặt', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
       const SizedBox(height: 20),
@@ -260,6 +278,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             if (_syncing)
               const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
           ]),
+        ]),
+      ),
+      const SizedBox(height: 24),
+      // --- Nguồn phim ---
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: kSurface, borderRadius: BorderRadius.circular(8)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: const [
+            Icon(Icons.dns_outlined, color: Colors.white70, size: 22),
+            SizedBox(width: 12),
+            Text('Nguồn phim',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          ]),
+          const SizedBox(height: 8),
+          const Text(
+            'App gộp phim từ nhiều nguồn: nguồn đầu được ưu tiên, phim nào nguồn đó '
+            'chưa có thì nguồn sau bù vào. Tắt bớt nếu muốn xem của riêng một nguồn.',
+            style: TextStyle(color: Colors.white70, height: 1.4),
+          ),
+          const SizedBox(height: 4),
+          for (final src in ref.watch(allSourcesProvider))
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              activeThumbColor: kRed,
+              value: enabled.contains(src.id),
+              title: Text(sourceLabel(src.id),
+                  style: const TextStyle(color: Colors.white)),
+              subtitle: Text(
+                src.id == kSrcNguonc
+                    ? 'phim.nguonc.com — nguồn gốc của app'
+                    : 'phimapi.com — kho phim lớn, có sẵn link phát trực tiếp',
+                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+              onChanged: (v) => _toggleSource(src.id, v),
+            ),
+          if (enabled.length <= 1)
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text('Phải bật ít nhất một nguồn.',
+                  style: TextStyle(color: Colors.orangeAccent, fontSize: 12)),
+            ),
         ]),
       ),
       const SizedBox(height: 24),

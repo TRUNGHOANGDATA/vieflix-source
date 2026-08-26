@@ -45,6 +45,12 @@ dependencies:
   open_filex: ^4.5.0
   permission_handler: ^11.3.1
   speech_to_text: ^7.0.0
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  # CHỈ lấy thư viện native cho Windows. Gói `media_kit_libs_video` gộp mọi nền
+  # tảng, kéo theo libmpv.so 38MB vào APK trong khi trình phát native đã tắt sẵn
+  # trên Android (_canNative yêu cầu Platform.isWindows) -> APK phình vô ích.
+  media_kit_libs_windows_video: ^1.0.10
 
 dev_dependencies:
   flutter_test:

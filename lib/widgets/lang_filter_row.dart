@@ -76,3 +76,69 @@ class LangFilterRow extends StatelessWidget {
     );
   }
 }
+
+/// Hàng lọc theo CHẤT LƯỢNG (FHD / HD / SD). Chọn nhiều, cùng kiểu chip với
+/// [LangFilterRow]. Dùng ở trang "Xem tất cả" — màn Thư viện KHÔNG dùng vì khối
+/// lọc ở đó phải bó dưới 110px, thêm một hàng nữa là cắt mất hàng phim.
+class QualityFilterRow extends StatelessWidget {
+  final Set<String> selected; // chứa: fhd / hd / sd
+  final ValueChanged<Set<String>> onChanged;
+  final EdgeInsets padding;
+
+  const QualityFilterRow({
+    super.key,
+    required this.selected,
+    required this.onChanged,
+    this.padding = const EdgeInsets.fromLTRB(16, 0, 16, 6),
+  });
+
+  void _toggle(String? val) {
+    final next = Set<String>.from(selected);
+    if (val == null) {
+      next.clear();
+    } else if (next.contains(val)) {
+      next.remove(val);
+    } else {
+      next.add(val);
+    }
+    onChanged(next);
+  }
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: padding,
+        child: Row(children: [
+          _chip('Mọi chất lượng', null),
+          _chip('FHD', 'fhd'),
+          _chip('HD', 'hd'),
+          _chip('SD / CAM', 'sd'),
+        ]),
+      );
+
+  Widget _chip(String label, String? val) {
+    final sel = val == null ? selected.isEmpty : selected.contains(val);
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FocusHighlight(
+        scale: 1.0,
+        onPressed: () => _toggle(val),
+        builder: (f) => AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: sel ? kRed : kSurface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: (f || sel) ? kRed : Colors.white12, width: f ? 2 : 1.5),
+            boxShadow: f ? [BoxShadow(color: kRed.withValues(alpha: 0.45), blurRadius: 12)] : null,
+          ),
+          child: Text(label,
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: sel ? FontWeight.bold : FontWeight.normal)),
+        ),
+      ),
+    );
+  }
+}
