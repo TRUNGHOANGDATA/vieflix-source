@@ -194,4 +194,41 @@ void main() {
       expect(pick(list), 1);
     });
   });
+
+  group('resumePosition', () {
+    test('nguonc trả 0 — trang embed của nó tự nhớ, tua đè sẽ đá nhau', () {
+      expect(
+          resumePosition(
+              provider: kSrcNguonc, positionSeconds: 600, durationSeconds: 2400),
+          0);
+    });
+
+    test('phimapi tua đúng chỗ đang xem dở', () {
+      expect(
+          resumePosition(
+              provider: kSrcPhimApi, positionSeconds: 600, durationSeconds: 2400),
+          600);
+    });
+
+    test('gần hết tập thì phát lại từ đầu, không nhảy vào đoạn cuối', () {
+      expect(
+          resumePosition(
+              provider: kSrcPhimApi, positionSeconds: 2380, durationSeconds: 2400),
+          0);
+    });
+
+    test('mới xem vài giây thì khỏi tua', () {
+      expect(
+          resumePosition(
+              provider: kSrcPhimApi, positionSeconds: 3, durationSeconds: 2400),
+          0);
+    });
+
+    test('chưa biết thời lượng vẫn tua được', () {
+      expect(
+          resumePosition(
+              provider: kSrcPhimApi, positionSeconds: 600, durationSeconds: 0),
+          600);
+    });
+  });
 }

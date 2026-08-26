@@ -40,6 +40,30 @@ int defaultSourceIndex(List<StreamSource> servers) {
   return vietHls ?? viet ?? hls ?? 0;
 }
 
+/// Vị trí cần tua tới khi bấm "Xem tiếp", tính bằng giây (0 = phát từ đầu).
+///
+/// nguonc TỰ NHỚ vị trí trong trang embed của nó: mở lại là hiện hộp "Bạn đã
+/// dừng lại ở ..." và app bấm hộ. Tua đè lên sẽ đá nhau với cơ chế đó, nên
+/// nguồn này trả về 0. Mọi nguồn khác — và cả đường phát thẳng m3u8, vốn không
+/// có trang web nào để mà nhớ — thì app phải tự tua.
+///
+/// Gần hết tập thì coi như xem xong, phát lại từ đầu thay vì nhảy vào đoạn
+/// giới thiệu cuối phim.
+double resumePosition({
+  required String provider,
+  required double positionSeconds,
+  required double durationSeconds,
+  double endGuardSeconds = 45,
+  double minSeconds = 5,
+}) {
+  if (provider == kSrcNguonc) return 0;
+  if (positionSeconds < minSeconds) return 0;
+  if (durationSeconds > 0 && positionSeconds > durationSeconds - endGuardSeconds) {
+    return 0;
+  }
+  return positionSeconds;
+}
+
 /// Tìm CÙNG bộ phim đó ở một nguồn khác rồi lấy thêm lựa chọn phát.
 ///
 /// Nguồn kia đặt slug khác nên phải tìm theo tên: tìm kiếm bằng tên gốc (không

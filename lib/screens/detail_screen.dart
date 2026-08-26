@@ -374,17 +374,25 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
   Future<void> _playSmart(MovieDetail d, StreamSource s, List<Episode> eps,
       List<StreamSource> all, int srvIndex) async {
     if (eps.isEmpty) return;
-    // App chỉ mở ĐÚNG TẬP đang xem dở. VỊ TRÍ trong tập do NGUỒN (nguonc) tự nhớ:
-    // khi mở lại, trang nguồn hiện hộp "Bạn đã dừng lại ở ..." và app tự bấm
-    // "Tiếp tục xem" hộ (remote không bấm được nút web). App KHÔNG tự tua/hỏi lại
-    // nữa để khỏi đá nhau với cơ chế nhớ của nguồn.
+    // Mở đúng tập đang xem dở. Còn VỊ TRÍ trong tập thì tuỳ nguồn: nguonc tự nhớ
+    // trong trang embed của nó (app chỉ bấm hộ nút "Tiếp tục xem"), các nguồn
+    // khác không nhớ gì nên app phải tự tua — xem `resumePosition`.
     final p = ref.read(storeProvider).progressFor(d.slug);
     var idx = 0;
+    double resume = 0;
     if (p != null) {
       final i = eps.indexWhere((e) => e.slug == p.episodeSlug);
-      if (i >= 0) idx = i;
+      if (i >= 0) {
+        idx = i;
+        resume = resumePosition(
+          provider: s.provider,
+          positionSeconds: p.positionSeconds,
+          durationSeconds: p.durationSeconds,
+        );
+      }
     }
-    _play(d, s, eps, eps[idx], all: all, srvIndex: srvIndex);
+    _play(d, s, eps, eps[idx],
+        startPosition: resume, all: all, srvIndex: srvIndex);
   }
 
   void _play(MovieDetail d, StreamSource s, List<Episode> eps, Episode ep,

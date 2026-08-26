@@ -23,8 +23,17 @@ Future<void> main(List<String> args) async {
   final r = await done.future.timeout(const Duration(seconds: 30),
       onTimeout: () => 'TIMEOUT - khong doc duoc thoi luong');
   print(r);
-  final pos = p.state.position.inMilliseconds;
-  print('vi tri sau khi phat: ${pos}ms, dang phat: ${p.state.playing}');
+  print('vi tri sau khi phat: ${p.state.position.inMilliseconds}ms, '
+      'dang phat: ${p.state.playing}');
+
+  // Tua tới phut thu 10 - kiem "xem tiep" co that su nhay dung cho khong.
+  const target = Duration(minutes: 10);
+  await p.seek(target);
+  await Future.delayed(const Duration(seconds: 3));
+  final after = p.state.position;
+  final lech = (after - target).inSeconds.abs();
+  print('sau khi tua toi ${target.inSeconds}s -> dang o ${after.inSeconds}s '
+      '(lech ${lech}s) => ${lech <= 15 ? "TUA OK" : "TUA HONG"}');
   await p.dispose();
   exit(0);
 }
