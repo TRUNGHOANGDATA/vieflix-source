@@ -285,7 +285,11 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                   width: 72,
                   child: FocusHighlight(
                     scale: 1.0,
-                    onPressed: () => _play(d, servers[srv], eps, ep, all: servers, srvIndex: srv),
+                    // Bấm đúng tập đang xem dở thì tua tiếp, không bắt xem lại
+                    // từ đầu; bấm tập khác thì phát từ đầu như thường.
+                    onPressed: () => _play(d, servers[srv], eps, ep,
+                        startPosition: _resumeFor(d, servers[srv], ep),
+                        all: servers, srvIndex: srv),
                     builder: (f) => Container(
                       height: 36,
                       alignment: Alignment.center,
@@ -371,6 +375,18 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
 
   /// Bấm "Xem ngay": nếu phim đang xem dở thì HỎI xem tiếp tập cũ hay xem từ đầu.
   /// Nút "Xem tiếp" được chọn sẵn -> trên TV chỉ cần bấm OK.
+  /// Vị trí cần tua tới khi phát [ep] của nguồn [s]: chỉ tua khi ĐÚNG tập đang
+  /// xem dở, và chỉ với nguồn không tự nhớ vị trí.
+  double _resumeFor(MovieDetail d, StreamSource s, Episode ep) {
+    final p = ref.read(storeProvider).progressFor(d.slug);
+    if (p == null || p.episodeSlug != ep.slug) return 0;
+    return resumePosition(
+      provider: s.provider,
+      positionSeconds: p.positionSeconds,
+      durationSeconds: p.durationSeconds,
+    );
+  }
+
   Future<void> _playSmart(MovieDetail d, StreamSource s, List<Episode> eps,
       List<StreamSource> all, int srvIndex) async {
     if (eps.isEmpty) return;
@@ -379,20 +395,13 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     // khác không nhớ gì nên app phải tự tua — xem `resumePosition`.
     final p = ref.read(storeProvider).progressFor(d.slug);
     var idx = 0;
-    double resume = 0;
     if (p != null) {
       final i = eps.indexWhere((e) => e.slug == p.episodeSlug);
-      if (i >= 0) {
-        idx = i;
-        resume = resumePosition(
-          provider: s.provider,
-          positionSeconds: p.positionSeconds,
-          durationSeconds: p.durationSeconds,
-        );
-      }
+      if (i >= 0) idx = i;
     }
     _play(d, s, eps, eps[idx],
-        startPosition: resume, all: all, srvIndex: srvIndex);
+        startPosition: _resumeFor(d, s, eps[idx]),
+        all: all, srvIndex: srvIndex);
   }
 
   void _play(MovieDetail d, StreamSource s, List<Episode> eps, Episode ep,
