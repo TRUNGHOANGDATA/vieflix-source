@@ -186,10 +186,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   int _seekTries = 0;
   double _adsSkipped = 0;    // số giây quảng cáo đã cắt khỏi luồng
 
-  /// Chỉ bật native trên Windows. Android/TV vẫn đi đường WebView cho tới khi
-  /// đo được dung lượng APK (libmpv làm gói phình ~50MB).
+  /// Bật trên Windows và Android/TV. Có link m3u8 là phát thẳng bằng trình phát
+  /// của app: bỏ được trang embed, và quan trọng hơn là CẮT ĐƯỢC quảng cáo chèn
+  /// trong luồng — thứ mà trang embed của nguồn không cho bỏ qua.
   bool _canNative(Episode ep) =>
-      Platform.isWindows && ep.m3u8.isNotEmpty && !_hlsFailed;
+      (Platform.isWindows || Platform.isAndroid) &&
+      ep.m3u8.isNotEmpty &&
+      !_hlsFailed;
 
   Episode? get _curEp =>
       (_idx >= 0 && _idx < _eps.length) ? _eps[_idx] : null;

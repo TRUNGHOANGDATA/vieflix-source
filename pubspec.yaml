@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.25+10025
+version: 1.0.26+10026
 
 environment:
   sdk: ^3.12.2
@@ -47,10 +47,10 @@ dependencies:
   speech_to_text: ^7.0.0
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
-  # CHỈ lấy thư viện native cho Windows. Gói `media_kit_libs_video` gộp mọi nền
-  # tảng, kéo theo libmpv.so 38MB vào APK trong khi trình phát native đã tắt sẵn
-  # trên Android (_canNative yêu cầu Platform.isWindows) -> APK phình vô ích.
-  media_kit_libs_windows_video: ^1.0.10
+  # Gộp mọi nền tảng: từ 1.0.26 trình phát native chạy CẢ trên Android/TV để cắt
+  # được quảng cáo chèn trong luồng (trang embed của nguồn thì không cắt được).
+  # Đổi lại APK phình vì libmpv.so — xem ghi chú abiFilters ở android/app/build.gradle.
+  media_kit_libs_video: ^1.0.7
 
 dev_dependencies:
   flutter_test:

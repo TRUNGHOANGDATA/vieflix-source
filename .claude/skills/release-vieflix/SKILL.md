@@ -63,6 +63,16 @@ export ANDROID_SDK_ROOT="H:/Android/Sdk"
 mkdir -p /c/Temp; export TEMP="C:\\Temp"; export TMP="C:\\Temp"
 cd "H:/Tao App Xem Phim" && "H:/flutter/bin/flutter" build apk --release
 ```
+**APK CHỈ chứa thư viện ARM** (`arm64-v8a` + `armeabi-v7a`), cấu hình ở
+`android/app/build.gradle.kts` mục `packaging { jniLibs { excludes } }`. Từ 1.0.26
+trình phát native bật cả trên Android nên libmpv.so chiếm phần lớn APK — riêng bản
+x86_64 là 34.6MB, đưa APK từ 58.8MB lên 93.4MB mà chẳng TV box nào dùng tới.
+Lưu ý `ndk { abiFilters }` KHÔNG ăn (plugin Flutter ghi đè) và `--target-platform`
+chỉ lọc thư viện của Flutter chứ không lọc .so trong AAR của plugin — nên phải loại
+lúc đóng gói. Cần chạy máy ảo Android thì tạm bỏ khối `packaging` đó.
+Kiểm nhanh sau khi build: `aapt2 dump badging <apk> | grep native-code` phải ra
+đúng `'arm64-v8a' 'armeabi-v7a'`.
+
 Ra file `build/app/outputs/flutter-apk/app-release.apk`. Chép ra tên theo phiên bản:
 ```powershell
 $ver = "X.Y.Z"   # <-- đổi cho khớp

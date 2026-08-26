@@ -27,6 +27,21 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // CHỈ đóng gói thư viện cho ARM. Từ khi bật trình phát native cho Android,
+    // libmpv.so chiếm phần lớn APK — riêng bản x86_64 là 34.6MB trong tổng
+    // 93.4MB. x86_64 chỉ dùng cho MÁY ẢO: mọi TV box (Amlogic, Rockchip,
+    // MediaTek), Chromecast, Shield, Fire TV và điện thoại Android đều là ARM.
+    //
+    // `ndk { abiFilters }` KHÔNG ăn ở đây vì plugin Flutter ghi đè, còn cờ
+    // `--target-platform` chỉ lọc thư viện CỦA FLUTTER chứ không lọc .so đến từ
+    // AAR của plugin (libmpv nằm trong đó). Nên phải loại lúc đóng gói.
+    // Cần chạy trên máy ảo Android thì tạm bỏ khối này.
+    packaging {
+        jniLibs {
+            excludes += setOf("lib/x86_64/**", "lib/x86/**")
+        }
+    }
+
     defaultConfig {
         applicationId = "com.vieflix.app_xem_phim"
         // TV cần tối thiểu Android 5.0 (API 21); webview/speech cũng cần >= 21
