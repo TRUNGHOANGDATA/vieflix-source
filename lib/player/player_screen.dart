@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:media_kit/media_kit.dart';
+import '../data/hls_source.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../main.dart' show webViewEnvironment;
 import '../models/episode.dart';
@@ -183,6 +184,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _hlsFailed = false;   // hls lỗi -> đã rơi về embed, đừng thử lại vòng vo
   double _pendingSeek = 0;   // giây cần tua tới NGAY KHI player sẵn sàng
   int _seekTries = 0;
+  double _adsSkipped = 0;    // số giây quảng cáo đã cắt khỏi luồng
 
   /// Chỉ bật native trên Windows. Android/TV vẫn đi đường WebView cho tới khi
   /// đo được dung lượng APK (libmpv làm gói phình ~50MB).
@@ -347,8 +349,26 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
     _pendingSeek = startAt;
     _seekTries = 0;
+    // Bỏ quảng cáo chèn trong luồng trước khi phát. Quảng cáo nằm ngay trong
+    // playlist nên không có nút bỏ qua; lọc hỏng thì dùng link gốc như cũ.
+    String toPlay = url;
     try {
-      await p.open(Media(url), play: true);
+      final cleaned = await HlsPreparer().prepare(url);
+      if (cleaned != null && mounted && _native) {
+        toPlay = cleaned.path;
+        _adsSkipped = cleaned.removedSeconds;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          backgroundColor: kRed,
+          duration: const Duration(seconds: 3),
+          content: Text('Đã cắt ${_adsSkipped.round()} giây quảng cáo '
+              'chèn trong phim'),
+        ));
+      }
+    } catch (_) {/* lọc lỗi -> phát link gốc */}
+    if (!mounted || !_native || _np != p) return; // đã đổi tập/nguồn lúc đang lọc
+
+    try {
+      await p.open(Media(toPlay), play: true);
       await p.setVolume(_vol * 100);
       _resumeApplied = true; // đường native tự lo bằng _applyPendingSeek
     } catch (e) {
@@ -372,8 +392,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     p.seek(Duration(milliseconds: (target * 1000).round()));
     Future.delayed(const Duration(seconds: 3), () {
       if (!mounted || !_native || _pendingSeek <= 2) return;
-      if ((_pos - target).abs() <= 15) {
-        _pendingSeek = 0; // đã tới nơi
+      // Tính là TỚI NƠI khi đã ở target trở đi: HLS nhảy theo khung hình khoá
+      // nên hay quá đà chục giây, đo thật thấy tua 600 vào 626. Thứ cần bắt là
+      // lệnh tua bị NUỐT (vẫn nằm ở đầu phim), chứ không phải quá đà.
+      if (_pos >= target - 10) {
+        _pendingSeek = 0;
         return;
       }
       if (_seekTries >= 3) {
@@ -387,6 +410,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   void _closeNative() {
     _pendingSeek = 0;
     _seekTries = 0;
+    _adsSkipped = 0;
     for (final s in _nsubs) {
       s.cancel();
     }
