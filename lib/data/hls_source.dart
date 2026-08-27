@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'hls_ad_filter.dart';
+import 'app_log.dart';
 
 /// Chuẩn bị link HLS cho trình phát native: tải playlist về, bỏ quảng cáo chèn
 /// trong luồng, ghi ra file tạm rồi cho trình phát mở file đó.
@@ -59,7 +60,8 @@ class HlsPreparer {
         removedSeconds: res.removedSeconds,
         removedSegments: res.removedSegments,
       );
-    } catch (_) {
+    } catch (e) {
+      vlog('ads', 'chuan bi playlist that bai: $e');
       return null;
     }
   }

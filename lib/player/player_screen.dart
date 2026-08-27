@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:media_kit/media_kit.dart';
 import '../data/hls_source.dart';
+import '../data/app_log.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../main.dart' show webViewEnvironment;
 import '../models/episode.dart';
@@ -254,9 +255,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _pollT = Timer.periodic(const Duration(seconds: 1), (_) => _syncState());
     // Có link m3u8 -> phát thẳng bằng player native.
     final ep0 = _curEp;
+    vlog('player', 'mo trinh phat: platform=${Platform.operatingSystem} '
+        'co_m3u8=${ep0?.m3u8.isNotEmpty ?? false} '
+        'co_embed=${ep0?.embed.isNotEmpty ?? false} '
+        'chon_native=${ep0 != null && _canNative(ep0)}');
     if (ep0 != null && _canNative(ep0)) {
       _native = true;
       _openNative(ep0.m3u8, widget.startPosition);
+    } else {
+      vlog('player', 'dung WebView voi url=$_url');
     }
     // Android: ẩn thanh trạng thái / thanh điều hướng cho phim thật sự kín màn.
     if (Platform.isAndroid) {
@@ -346,6 +353,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }));
     // Host m3u8 hay đổi/hết hạn -> rơi về link embed thay vì đứng hình.
     _nsubs.add(p.stream.error.listen((e) {
+      vlog('player', 'mpv bao loi: $e');
       if (!mounted || !_native) return;
       _fallbackToEmbed(e);
     }));
@@ -357,6 +365,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     String toPlay = url;
     try {
       final cleaned = await HlsPreparer().prepare(url);
+      vlog('ads', cleaned == null
+          ? 'KHONG loc duoc quang cao -> phat link goc'
+          : 'da cat ${cleaned.removedSegments} phan doan '
+              '= ${cleaned.removedSeconds.toStringAsFixed(1)}s');
       if (cleaned != null && mounted && _native) {
         toPlay = cleaned.path;
         _adsSkipped = cleaned.removedSeconds;
@@ -367,14 +379,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               'chèn trong phim'),
         ));
       }
-    } catch (_) {/* lọc lỗi -> phát link gốc */}
+    } catch (e) {
+      vlog('ads', 'loi khi loc quang cao: $e');
+    }
     if (!mounted || !_native || _np != p) return; // đã đổi tập/nguồn lúc đang lọc
 
     try {
       await p.open(Media(toPlay), play: true);
       await p.setVolume(_vol * 100);
       _resumeApplied = true; // đường native tự lo bằng _applyPendingSeek
+      vlog('player', 'da mo native OK: ${toPlay == url ? "link goc" : "playlist da loc"}');
     } catch (e) {
+      vlog('player', 'MO NATIVE LOI: $e');
       if (mounted) _fallbackToEmbed('$e');
     }
   }
@@ -425,6 +441,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   /// hls hỏng -> quay về trang embed của chính nguồn đó, giữ nguyên chỗ đang xem.
   void _fallbackToEmbed(String why) {
+    vlog('player', 'roi ve embed vi: $why');
     if (_hlsFailed) return;
     final ep = _curEp;
     if (ep == null || ep.embed.isEmpty) return;
@@ -1159,7 +1176,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   forMainFrameOnly: false,
                 ),
               ]),
-              onWebViewCreated: (c) => _c = c,
+              onWebViewCreated: (c) {
+                _c = c;
+                vlog('webview', 'da tao WebView');
+              },
+              onReceivedError: (c, req, err) =>
+                  vlog('webview', 'LOI TAI TRANG ${req.url}: ${err.type} ${err.description}'),
+              onReceivedHttpError: (c, req, resp) =>
+                  vlog('webview', 'HTTP ${resp.statusCode} khi tai ${req.url}'),
               shouldOverrideUrlLoading: (c, action) async {
                 final u = action.request.url?.toString() ?? '';
                 if (isAdUrl(u)) return NavigationActionPolicy.CANCEL;
