@@ -1,15 +1,19 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
-import 'hls_ad_filter.dart';
 import 'app_log.dart';
+import 'hls_ad_filter.dart';
 
 /// Chuẩn bị link HLS cho trình phát native: tải playlist về, bỏ quảng cáo chèn
-/// trong luồng, ghi ra file tạm rồi cho trình phát mở file đó.
+/// trong luồng, rồi **phục vụ lại qua một máy chủ HTTP nội bộ** (127.0.0.1).
 ///
-/// Vì sao phải ghi ra file: quảng cáo nằm NGAY TRONG playlist nên chặn theo tên
-/// miền không ăn thua — phải sửa chính playlist. Phân đoạn giữ lại được đổi sang
-/// URL tuyệt đối nên trình phát vẫn tải thẳng từ host gốc như thường.
+/// Vì sao phải qua HTTP chứ không ghi ra file: quảng cáo nằm ngay trong playlist
+/// nên bắt buộc phải sửa playlist. Nhưng nếu đưa cho trình phát một FILE cục bộ
+/// mà bên trong trỏ tới phân đoạn `https`, thì bộ đọc HLS của ffmpeg coi đó là
+/// nhảy giao thức (file -> https) và tuỳ bản dựng từng nền tảng mà CHẶN. Phục vụ
+/// qua `http://127.0.0.1` thì playlist và phân đoạn cùng nằm trong nhóm giao thức
+/// mạng nên không bản nào chặn — và cũng khỏi đụng tới quyền ghi file trên Android.
 ///
 /// Mọi lỗi đều trả về null để bên gọi dùng link gốc — thà xem kèm quảng cáo còn
 /// hơn không xem được.
@@ -19,6 +23,10 @@ class HlsPreparer {
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
   HlsPreparer({http.Client? client}) : _client = client ?? http.Client();
+
+  static HttpServer? _server;
+  static final Map<String, String> _served = {};
+  static int _counter = 0;
 
   Future<String> _get(Uri u) async {
     final r = await _client.get(u, headers: {'User-Agent': _ua}).timeout(
@@ -30,12 +38,44 @@ class HlsPreparer {
     return r.body;
   }
 
-  /// Trả về (đường dẫn file playlist đã lọc, số giây quảng cáo đã bỏ).
-  /// null nghĩa là không lọc được — cứ dùng link gốc.
-  Future<({String path, double removedSeconds, int removedSegments})?> prepare(
-    String m3u8Url, {
-    Directory? tempDir,
-  }) async {
+  /// Bật máy chủ nội bộ nếu chưa có. Chỉ nghe trên loopback nên không máy nào
+  /// ngoài thiết bị này với tới được.
+  static Future<int> _ensureServer() async {
+    final s = _server;
+    if (s != null) return s.port;
+    final srv = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    _server = srv;
+    srv.listen((req) async {
+      final body = _served[req.uri.path];
+      if (body == null) {
+        req.response.statusCode = HttpStatus.notFound;
+        await req.response.close();
+        return;
+      }
+      req.response.headers.contentType =
+          ContentType('application', 'vnd.apple.mpegurl', charset: 'utf-8');
+      req.response.headers.set('Cache-Control', 'no-store');
+      req.response.add(utf8.encode(body));
+      await req.response.close();
+    }, onError: (Object e) => vlog('ads', 'may chu noi bo loi: $e'));
+    vlog('ads', 'may chu playlist noi bo chay o cong ${srv.port}');
+    return srv.port;
+  }
+
+  /// Đóng máy chủ nội bộ (gọi khi thoát trình phát).
+  static Future<void> shutdown() async {
+    final s = _server;
+    _server = null;
+    _served.clear();
+    if (s != null) await s.close(force: true);
+  }
+
+  /// Trả về link playlist đã bỏ quảng cáo (trỏ vào máy chủ nội bộ) kèm số liệu
+  /// đã cắt. null nghĩa là không lọc được hoặc phim vốn không có quảng cáo —
+  /// cứ dùng link gốc.
+  Future<({String url, double removedSeconds, int removedSegments})?> prepare(
+    String m3u8Url,
+  ) async {
     try {
       var url = Uri.parse(m3u8Url);
       var body = await _get(url);
@@ -51,12 +91,14 @@ class HlsPreparer {
       final res = filterHlsAds(body, url);
       if (res == null || !res.hasAds) return null; // không có quảng cáo thì thôi
 
-      final dir = tempDir ?? await getTemporaryDirectory();
-      final f = File(
-          '${dir.path}${Platform.pathSeparator}vieflix_${url.pathSegments.join('_').hashCode}.m3u8');
-      await f.writeAsString(res.playlist, flush: true);
+      final port = await _ensureServer();
+      // Giữ tối đa vài playlist gần nhất (đổi tập/đổi nguồn liên tục).
+      if (_served.length > 4) _served.clear();
+      final path = '/vf${_counter++}.m3u8';
+      _served[path] = res.playlist;
+
       return (
-        path: f.path,
+        url: 'http://127.0.0.1:$port$path',
         removedSeconds: res.removedSeconds,
         removedSegments: res.removedSegments,
       );

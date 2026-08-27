@@ -175,6 +175,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   late int _srcIdx;          // nguồn đang phát (chỉ số trong widget.sources)
   bool _srcPanel = false;    // đang mở bảng chọn nguồn
 
+  /// Trang của nguồn tải hỏng (chỉ tính khung chính). Có giá trị thì hiện bảng
+  /// báo lỗi thay vì để người xem ngồi nhìn màn hình đen không biết chuyện gì.
+  String? _webError;
+
   // ---- Trình phát native (chỉ dùng khi có link m3u8) ----
   // Có link video trực tiếp thì phát thẳng, khỏi qua trang embed: không quảng
   // cáo, không cần cầu nối JS, vị trí xem đọc chính xác từng giây.
@@ -289,6 +293,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _hideT?.cancel();
     _pollT?.cancel();
     _closeNative();
+    HlsPreparer.shutdown(); // tắt máy chủ playlist nội bộ khi rời trình phát
     _nextT?.cancel();
     super.dispose();
   }
@@ -370,7 +375,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           : 'da cat ${cleaned.removedSegments} phan doan '
               '= ${cleaned.removedSeconds.toStringAsFixed(1)}s');
       if (cleaned != null && mounted && _native) {
-        toPlay = cleaned.path;
+        toPlay = cleaned.url;
         _adsSkipped = cleaned.removedSeconds;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           backgroundColor: kRed,
@@ -870,6 +875,69 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   /// Bảng chọn nguồn: kiểu bảng của TvFilterBar, D-pad bấm được.
+  /// Bảng báo khi trang phát của nguồn không mở được.
+  ///
+  /// Trước đây gặp cảnh này là màn hình đen câm, không biết hỏng gì cũng chẳng
+  /// làm gì được. Nguồn khác thường vẫn phát bình thường nên lối thoát tốt nhất
+  /// là mời đổi nguồn ngay tại đây.
+  Widget _webErrorPanel() {
+    final coNguonKhac = widget.sources.length > 1;
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black87,
+        alignment: Alignment.center,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.error_outline, color: kAmber, size: 48),
+          const SizedBox(height: 12),
+          const Text('Không mở được trang phát của nguồn này',
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Text(_webError ?? '',
+                textAlign: TextAlign.center,
+                maxLines: 3, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          ),
+          const SizedBox(height: 18),
+          Wrap(spacing: 12, children: [
+            FocusHighlight(
+              scale: 1.0,
+              onPressed: () {
+                setState(() => _webError = null);
+                _c?.loadUrl(urlRequest: URLRequest(url: WebUri(_url)));
+              },
+              builder: (f) => _errBtn('Thử lại', f, dam: false),
+            ),
+            if (coNguonKhac)
+              FocusHighlight(
+                scale: 1.0,
+                autofocus: true,
+                onPressed: () => setState(() { _webError = null; _srcPanel = true; }),
+                builder: (f) => _errBtn('Đổi nguồn khác', f, dam: true),
+              ),
+            FocusHighlight(
+              scale: 1.0,
+              onPressed: _exit,
+              builder: (f) => _errBtn('Thoát', f, dam: false),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _errBtn(String label, bool focused, {required bool dam}) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        decoration: BoxDecoration(
+          color: dam ? kRed : kSurface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: focused ? kAmber : Colors.transparent, width: 2),
+        ),
+        child: Text(label,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      );
+
   Widget _sourcePanel() => Positioned.fill(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -954,6 +1022,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         if (_nextIn != null)
           Positioned(right: 28, bottom: _showBar ? 150 : 28, child: _nextEpisodeBox()),
         // Bảng chọn nguồn nằm TRÊN CÙNG để nhận được phím/chuột.
+        if (_webError != null && !_native) _webErrorPanel(),
         if (_srcPanel) _sourcePanel(),
         ]),
       ),
@@ -1180,8 +1249,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 _c = c;
                 vlog('webview', 'da tao WebView');
               },
-              onReceivedError: (c, req, err) =>
-                  vlog('webview', 'LOI TAI TRANG ${req.url}: ${err.type} ${err.description}'),
+              onReceivedError: (c, req, err) {
+                vlog('webview', 'LOI TAI TRANG ${req.url}: ${err.type} ${err.description}');
+                // Chỉ báo khi hỏng CHÍNH trang phim; ảnh/quảng cáo lỗi lặt vặt
+                // thì kệ, phim vẫn chạy được.
+                if (req.isForMainFrame == true && mounted) {
+                  setState(() => _webError = err.description);
+                }
+              },
               onReceivedHttpError: (c, req, resp) =>
                   vlog('webview', 'HTTP ${resp.statusCode} khi tai ${req.url}'),
               shouldOverrideUrlLoading: (c, action) async {
@@ -1217,6 +1292,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               // Cầu nối có cờ `window.__vfBridge` nên tiêm lại nhiều lần vô hại;
               // Android vẫn chạy bằng userScript như cũ.
               onLoadStop: (c, url) async {
+                if (_webError != null && mounted) {
+                  setState(() => _webError = null); // tải lại được rồi
+                }
                 try { await c.evaluateJavascript(source: kPlayerBridgeScript); } catch (_) {}
                 try { await c.evaluateJavascript(source: kAutoPlayScript); } catch (_) {}
                 _syncState();
