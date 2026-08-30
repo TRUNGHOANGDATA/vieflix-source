@@ -115,9 +115,11 @@ void main() {
       expect(kAntiAdUserScript, contains('fake.self = fake'));
     });
 
-    test('vẫn giữ các lớp chặn khác', () {
+    test('vẫn giữ lớp chặn devtools; KHÔNG còn đụng jwplayer của nguồn', () {
       expect(kAntiAdUserScript, contains('devtoolsDetector'));
-      expect(kAntiAdUserScript, contains('advertising'));
+      // Đã gỡ Proxy jwplayer: player.js 2.1 của nguồn tự dựng player, mình sửa
+      // config setup của nó làm nó init hỏng ("Lỗi khởi tạo player").
+      expect(kAntiAdUserScript.contains('new Proxy'), isFalse);
     });
   });
 }

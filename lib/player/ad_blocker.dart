@@ -231,64 +231,11 @@ const String kAntiAdUserScript = r'''
       configurable: true
     }); } catch (e) {}
 
-    // 2b) CHẶN TẬN GỐC: bọc jwplayer bằng Proxy (giữ nguyên mọi thuộc tính),
-    //     chỉ xoá 'advertising'/'ads' khỏi config khi setup -> ad không được nạp.
-    try {
-      var _jwReal;
-      function makeProxy(orig) {
-        if (!orig || orig.__adProxied) return orig;
-        var pr = new Proxy(orig, {
-          apply: function (target, thisArg, args) {
-            var inst = Reflect.apply(target, thisArg, args);
-            try {
-              if (inst && typeof inst.setup === 'function' && !inst.__adStrip) {
-                inst.__adStrip = 1;
-                var origSetup = inst.setup.bind(inst);
-                inst.setup = function (cfg) {
-                  try {
-                    if (cfg && typeof cfg === 'object') {
-                      delete cfg.advertising;
-                      delete cfg.ads;
-                      if (cfg.plugins) { try { delete cfg.plugins.vast; delete cfg.plugins.googima; } catch (e) {} }
-                      // TỰ PHÁT: nguồn phim đặt autostart:false -> player nằm im và
-                      // hiện nút play. Ép bật ngay lúc khởi tạo (gọi play() sau khi
-                      // player đã dựng KHÔNG có tác dụng).
-                      cfg.autostart = true;
-                      cfg.mute = false;
-                    }
-                  } catch (e) {}
-                  var r = origSetup(cfg);
-                  // Khi player sẵn sàng thì phát luôn (lớp dự phòng cho autostart).
-                  try {
-                    if (r && typeof r.on === 'function') {
-                      r.on('ready', function () { try { r.play(true); } catch (e) {} });
-                      r.on('pause', function () {
-                        // Nguồn đôi khi pause NGAY sau ready -> đẩy chạy lại 1 lần.
-                        // Chỉ can thiệp khi pause ở đầu phim (pos<2s); KHÔNG đè khi
-                        // người dùng chủ động tạm dừng giữa chừng.
-                        try {
-                          var pos = (typeof r.getPosition === 'function') ? r.getPosition() : 0;
-                          if (!r.__resumedOnce && pos < 2) { r.__resumedOnce = 1; setTimeout(function () { try { r.play(true); } catch (e) {} }, 300); }
-                        } catch (e) {}
-                      });
-                    }
-                  } catch (e) {}
-                  return r;
-                };
-              }
-            } catch (e) {}
-            return inst;
-          }
-        });
-        try { orig.__adProxied = 1; } catch (e) {}
-        return pr;
-      }
-      Object.defineProperty(window, 'jwplayer', {
-        configurable: true,
-        get: function () { return _jwReal; },
-        set: function (v) { _jwReal = makeProxy(v); }
-      });
-    } catch (e) {}
+    // 2b) [ĐÃ TẮT] Trước đây bọc jwplayer bằng Proxy để xoá quảng cáo + ép tự
+    //     phát. Nhưng nguồn streamc.xyz nay phát bằng player.js 2.1 (mã hoá) tự
+    //     dựng player, và việc mình sửa config setup của nó làm nó init hỏng
+    //     ("Lỗi khởi tạo player"). Đường tự-phát đã có kAutoPlayScript lo, nên
+    //     bỏ hẳn lớp can thiệp này để không phá player của nguồn.
 
     // 3) Ẩn overlay/banner QC + cho video full khung
     var css = document.createElement('style');

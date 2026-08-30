@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:io' show Platform, File, FileMode;
-import 'package:path_provider/path_provider.dart';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -1294,12 +1293,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   _handlePageKey(m.substring(6));
                   return;
                 }
-                if (!m.startsWith('VIEFLIX_DBG')) return;
-                try {
-                  final dir = await getApplicationSupportDirectory();
-                  final f = File('${dir.path}${Platform.pathSeparator}player-debug.log');
-                  await f.writeAsString('$m\n', mode: FileMode.append);
-                } catch (_) {}
+                // Ghi MỌI thông báo console ra nhật ký để soi khi phim lỗi
+                // (player.js của nguồn in "Lỗi khởi tạo player" ra đây).
+                final lvl = msg.messageLevel.toString().split('.').last;
+                vlog('web-console',
+                    '[$lvl] ${m.length > 500 ? m.substring(0, 500) : m}');
               },
               // Sau khi trang tải xong thì TỰ TIÊM LẠI script bằng evaluateJavascript.
               //
