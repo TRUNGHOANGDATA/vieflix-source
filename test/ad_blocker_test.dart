@@ -102,4 +102,22 @@ void main() {
       }
     });
   });
+
+  group('kịch bản chống quảng cáo', () {
+    test('window.open trả CỬA SỔ GIẢ chứ không trả null', () {
+      // Trang embed của nguồn chỉ chạy player khi mở được popup; trả null là nó
+      // gọi blockPlayer() và xoá luôn link phim.
+      expect(kAntiAdUserScript, contains('window.open = function'));
+      expect(kAntiAdUserScript.contains('window.open = function () { return null; }'),
+          isFalse,
+          reason: 'trả null sẽ bị nguồn phát hiện là chặn quảng cáo');
+      expect(kAntiAdUserScript, contains('closed: false'));
+      expect(kAntiAdUserScript, contains('fake.self = fake'));
+    });
+
+    test('vẫn giữ các lớp chặn khác', () {
+      expect(kAntiAdUserScript, contains('devtoolsDetector'));
+      expect(kAntiAdUserScript, contains('advertising'));
+    });
+  });
 }

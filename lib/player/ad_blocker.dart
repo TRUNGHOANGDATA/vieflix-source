@@ -205,8 +205,26 @@ const String kAutoPlayScript = r'''
 const String kAntiAdUserScript = r'''
 (function () {
   try {
-    // 1) Chặn mở tab/popup quảng cáo
-    window.open = function () { return null; };
+    // 1) Popup quảng cáo: KHÔNG mở thật, nhưng phải trả về một CỬA SỔ GIẢ.
+    //
+    // Trang embed của nguồn (streamc.xyz) chỉ chạy player khi mở được popup:
+    //   window.addEventListener('popup-failed', () => blockPlayer());
+    // và blockPlayer() xoá luôn link phim, hiện "PHÁT HIỆN CHẶN QUẢNG CÁO".
+    // Trả null là chúng nó biết ngay -> mất phim. Trả cửa sổ giả thì chúng tưởng
+    // popup đã mở, player chạy bình thường, mà thực tế không có tab nào bật lên.
+    window.open = function () {
+      var noop = function () {};
+      var fake = {
+        closed: false, opener: null, name: '', focus: noop, blur: noop,
+        close: function () { this.closed = true; }, print: noop,
+        moveTo: noop, resizeTo: noop, postMessage: noop,
+        addEventListener: noop, removeEventListener: noop,
+        location: { href: 'about:blank', replace: noop, assign: noop, reload: noop },
+        document: { write: noop, writeln: noop, close: noop, open: noop, body: null }
+      };
+      fake.self = fake; fake.window = fake; fake.top = fake; fake.parent = fake;
+      return fake;
+    };
     // 2) Vô hiệu anti-devtools reload của trang embed
     try { Object.defineProperty(window, 'devtoolsDetector', {
       value: { launch: function(){}, addListener: function(){} },
