@@ -205,6 +205,61 @@ const String kAutoPlayScript = r'''
 const String kAntiAdUserScript = r'''
 (function () {
   try {
+    // 0) VÔ HIỆU "disable-devtool" (devtool-guard.bundle.js của streamc.xyz).
+    //    Log thật cho thấy nó bắn 'You don't have permission to use DEVTOOL type=6'
+    //    rồi HUỶ/TẢI LẠI trang liên tục -> player không bao giờ dựng được.
+    //    WebView nhúng hay bị DƯƠNG TÍNH GIẢ vì outerWidth/Height khác innerWidth
+    //    (nó dùng chênh lệch đó để đoán devtools đang mở). Ép outer = inner, đặt
+    //    vị trí cửa sổ về 0, và CẤM luôn hành động phá của nó (reload/điều hướng/
+    //    đóng) để dù có "phát hiện" cũng không đá được trang đi.
+    try {
+      var mirror = function (k, innerKey) {
+        try { Object.defineProperty(window, k, {
+          configurable: true, get: function () { return window[innerKey]; }
+        }); } catch (e) {}
+      };
+      mirror('outerWidth', 'innerWidth');
+      mirror('outerHeight', 'innerHeight');
+      try { Object.defineProperty(window, 'screenX', { configurable: true, get: function () { return 0; } }); } catch (e) {}
+      try { Object.defineProperty(window, 'screenY', { configurable: true, get: function () { return 0; } }); } catch (e) {}
+      try { Object.defineProperty(window, 'screenLeft', { configurable: true, get: function () { return 0; } }); } catch (e) {}
+      try { Object.defineProperty(window, 'screenTop', { configurable: true, get: function () { return 0; } }); } catch (e) {}
+    } catch (e) {}
+    // Bộ phát hiện type=6 là "Performance": nó gọi console.table(mảng 50x500)
+    // rồi ĐO THỜI GIAN. App đẩy MỌI console qua cầu nối native nên console.table
+    // rất chậm -> bị tưởng là DevTools mở -> reload vô tận (đã xác minh trong
+    // devtool-guard.bundle.js). Cho console.table/clear/dir... thành no-op NHANH;
+    // console.log chỉ còn chuyển tiếp tin nhắn CỦA APP (VFKEY / VIEFLIX_DBG).
+    // Giữ nguyên console.error/warn để vẫn đọc được lỗi thật khi chẩn đoán.
+    try {
+      var _c = window.console;
+      if (_c) {
+        var _log = _c.log ? _c.log.bind(_c) : function () {};
+        var noop = function () {};
+        ['table','clear','dir','dirxml','profile','profileEnd','group',
+         'groupCollapsed','groupEnd','count','countReset','trace','time',
+         'timeEnd','timeLog'].forEach(function (k) { try { _c[k] = noop; } catch (e) {} });
+        _c.log = function () {
+          try {
+            var a0 = arguments[0];
+            if (typeof a0 === 'string' &&
+                (a0.lastIndexOf('VFKEY:', 0) === 0 ||
+                 a0.lastIndexOf('VIEFLIX_DBG', 0) === 0)) {
+              return _log.apply(null, arguments);
+            }
+          } catch (e) {}
+          // mọi log khác: bỏ nhanh, KHÔNG qua cầu nối -> detector đo thấy nhanh.
+        };
+      }
+    } catch (e) {}
+
+    // Chặn hành động "trừng phạt" của guard: nó hay reload/điều hướng cả trang.
+    try { window.stop = function () {}; } catch (e) {}
+    try { Object.defineProperty(location, 'reload', { configurable: true, value: function () {} }); } catch (e) {}
+    // Một số bản disable-devtool để lại API toàn cục -> tắt luôn nếu có.
+    try { window.DisableDevtool = function () {}; } catch (e) {}
+    try { Object.defineProperty(window, 'disableDevtool', { configurable: true, value: function () {} }); } catch (e) {}
+
     // 1) Popup quảng cáo: KHÔNG mở thật, nhưng phải trả về một CỬA SỔ GIẢ.
     //
     // Trang embed của nguồn (streamc.xyz) chỉ chạy player khi mở được popup:

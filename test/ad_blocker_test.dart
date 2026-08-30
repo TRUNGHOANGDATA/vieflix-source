@@ -122,4 +122,23 @@ void main() {
       expect(kAntiAdUserScript.contains('new Proxy'), isFalse);
     });
   });
+
+  group('vô hiệu disable-devtool (devtool-guard)', () {
+    test('làm console.table/clear thành no-op để không dính Performance detector', () {
+      // type=6 = Performance: đo thời gian console.table(mảng lớn). App đẩy
+      // console qua cầu nối native nên chậm -> dương tính giả -> reload vô tận.
+      expect(kAntiAdUserScript, contains("'table'"));
+      expect(kAntiAdUserScript, contains('DEVTOOL'));
+    });
+
+    test('vẫn cho VFKEY và VIEFLIX_DBG đi qua console.log', () {
+      expect(kAntiAdUserScript, contains('VFKEY:'));
+      expect(kAntiAdUserScript, contains('VIEFLIX_DBG'));
+    });
+
+    test('mirror outerWidth để chặn Size detector, no-op reload để chặn phạt', () {
+      expect(kAntiAdUserScript, contains('outerWidth'));
+      expect(kAntiAdUserScript, contains('reload'));
+    });
+  });
 }
