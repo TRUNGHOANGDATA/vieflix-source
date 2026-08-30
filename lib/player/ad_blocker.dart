@@ -13,6 +13,55 @@ const List<String> kAdHosts = [
   'yandex.ru/metrika', 'facebook.net', 'connect.facebook',
 ];
 
+/// Đuôi tên miền hai cấp hay gặp — để `nguonc.com.vn` không bị cắt thành `com.vn`.
+const _twoLevelTlds = {
+  'com.vn', 'net.vn', 'org.vn', 'edu.vn', 'gov.vn', 'info.vn', 'biz.vn',
+  'co.uk', 'com.br', 'com.au', 'co.jp', 'com.cn', 'co.kr',
+};
+
+/// Tên miền đăng ký được của một host (bỏ các tiền tố con).
+/// `player.phim.nguonc.com` -> `nguonc.com`
+String registrableDomain(String host) {
+  final h = host.toLowerCase().split(':').first;
+  final parts = h.split('.').where((p) => p.isNotEmpty).toList();
+  if (parts.length <= 2) return parts.join('.');
+  final lastTwo = parts.sublist(parts.length - 2).join('.');
+  if (_twoLevelTlds.contains(lastTwo) && parts.length >= 3) {
+    return parts.sublist(parts.length - 3).join('.');
+  }
+  return lastTwo;
+}
+
+/// Hai địa chỉ có cùng một site không (tính theo tên miền đăng ký được).
+bool sameSite(String urlA, String urlB) {
+  final a = Uri.tryParse(urlA)?.host ?? '';
+  final b = Uri.tryParse(urlB)?.host ?? '';
+  if (a.isEmpty || b.isEmpty) return true; // không rõ thì đừng chặn oan
+  return registrableDomain(a) == registrableDomain(b);
+}
+
+/// Có phải quảng cáo đang CƯỚP KHUNG CHÍNH để đá sang trang khác không.
+///
+/// Trang phim bị nhồi quảng cáo hay tự điều hướng cả trang sang site cờ bạc —
+/// người xem đang xem phim thì bỗng thấy trang lạ (có khi là trang chặn của nhà
+/// mạng) đè kín, mất luôn phim. Người dùng KHÔNG hề bấm gì, nên mọi cú nhảy
+/// khung chính sang site khác SAU KHI phim đã tải xong đều là quảng cáo.
+///
+/// Chỉ xét sau khi tải xong lần đầu, vì lúc mới mở trang nguồn có thể chuyển
+/// hướng vài nhịp một cách chính đáng.
+bool isHijackNavigation({
+  required String currentUrl,
+  required String targetUrl,
+  required bool isMainFrame,
+  required bool pageLoadedOnce,
+}) {
+  if (!isMainFrame || !pageLoadedOnce) return false;
+  if (targetUrl.isEmpty) return false;
+  final scheme = Uri.tryParse(targetUrl)?.scheme ?? '';
+  if (scheme != 'http' && scheme != 'https') return false; // about:blank, data:...
+  return !sameSite(currentUrl, targetUrl);
+}
+
 bool isAdUrl(String url) {
   final u = url.toLowerCase();
   for (final h in kAdHosts) {

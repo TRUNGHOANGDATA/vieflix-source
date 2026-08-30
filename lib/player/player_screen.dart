@@ -175,6 +175,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   late int _srcIdx;          // nguồn đang phát (chỉ số trong widget.sources)
   bool _srcPanel = false;    // đang mở bảng chọn nguồn
 
+  /// Trang nguồn đã tải xong ít nhất một lần. Trước mốc này thì chuyển hướng
+  /// khung chính là chuyện bình thường của trang; sau mốc này là quảng cáo cướp.
+  bool _pageLoadedOnce = false;
+
   /// Trang của nguồn tải hỏng (chỉ tính khung chính). Có giá trị thì hiện bảng
   /// báo lỗi thay vì để người xem ngồi nhìn màn hình đen không biết chuyện gì.
   String? _webError;
@@ -572,6 +576,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       final probe = (await _c!.evaluateJavascript(source: 'JSON.stringify(window.__vfBridge===1)'))
           .toString();
       if (!probe.contains('true')) {
+        // kAntiAdUserScript PHẢI tiêm ở đây nữa: trên Windows plugin nhận
+        // initialUserScripts rồi bỏ quên, nên trước bản này nó CHƯA BAO GIỜ chạy
+        // -> window.open không bị chặn, trang phim bị quảng cáo đá đi mất.
+        await _c!.evaluateJavascript(source: kAntiAdUserScript);
         await _c!.evaluateJavascript(source: kPlayerBridgeScript);
         await _c!.evaluateJavascript(source: kAutoPlayScript);
         return; // nhịp sau đọc được ngay
@@ -815,6 +823,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   /// Nạp một tập: ưu tiên link m3u8 (player native), không có thì trang embed.
   void _loadEpisode(Episode ep, double startAt) {
+    _pageLoadedOnce = false; // trang mới, cho phép nó tự chuyển hướng lúc đầu
     if (_canNative(ep)) {
       if (!_native) setState(() => _native = true);
       _openNative(ep.m3u8, startAt);
@@ -1262,6 +1271,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               shouldOverrideUrlLoading: (c, action) async {
                 final u = action.request.url?.toString() ?? '';
                 if (isAdUrl(u)) return NavigationActionPolicy.CANCEL;
+                // Quảng cáo cướp cả khung chính để đá sang trang khác (hay gặp
+                // nhất là trang cờ bạc, rồi nhà mạng chặn và trả về trang cảnh
+                // báo đè kín màn hình, mất luôn phim đang xem).
+                if (isHijackNavigation(
+                  currentUrl: _url,
+                  targetUrl: u,
+                  isMainFrame: action.isForMainFrame,
+                  pageLoadedOnce: _pageLoadedOnce,
+                )) {
+                  vlog('webview', 'CHAN quang cao cuop trang -> $u');
+                  return NavigationActionPolicy.CANCEL;
+                }
                 return NavigationActionPolicy.ALLOW;
               },
               onCreateWindow: (c, req) async => false,
@@ -1292,6 +1313,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               // Cầu nối có cờ `window.__vfBridge` nên tiêm lại nhiều lần vô hại;
               // Android vẫn chạy bằng userScript như cũ.
               onLoadStop: (c, url) async {
+                _pageLoadedOnce = true;
                 if (_webError != null && mounted) {
                   setState(() => _webError = null); // tải lại được rồi
                 }

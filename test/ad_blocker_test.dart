@@ -24,4 +24,82 @@ void main() {
   test('adContentBlockers KHÔNG ném lỗi (Windows trả rỗng)', () {
     expect(() => adContentBlockers(), returnsNormally);
   });
+
+  group('chặn quảng cáo cướp khung chính', () {
+    test('registrableDomain bỏ tiền tố con, hiểu cả đuôi hai cấp', () {
+      expect(registrableDomain('player.phim.nguonc.com'), 'nguonc.com');
+      expect(registrableDomain('phimapi.com'), 'phimapi.com');
+      expect(registrableDomain('v7.kkphimplayer7.com'), 'kkphimplayer7.com');
+      expect(registrableDomain('abc.xyz.com.vn'), 'xyz.com.vn');
+      expect(registrableDomain('127.0.0.1:8080'), '0.1');
+    });
+
+    test('cùng site thì khác tên miền con vẫn tính là một', () {
+      expect(sameSite('https://phim.nguonc.com/a', 'https://player.nguonc.com/b'), isTrue);
+      expect(sameSite('https://phim.nguonc.com/a', 'https://cobac123.com/x'), isFalse);
+    });
+
+    test('sau khi phim đã tải xong, nhảy sang site khác là quảng cáo -> chặn', () {
+      expect(
+        isHijackNavigation(
+          currentUrl: 'https://phim.nguonc.com/embed/abc',
+          targetUrl: 'https://trangcobac.com/landing',
+          isMainFrame: true,
+          pageLoadedOnce: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('lúc trang đang tải lần đầu thì KHÔNG chặn (nguồn có thể tự chuyển hướng)', () {
+      expect(
+        isHijackNavigation(
+          currentUrl: 'https://phim.nguonc.com/embed/abc',
+          targetUrl: 'https://cdn-khac.com/player',
+          isMainFrame: true,
+          pageLoadedOnce: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('iframe con đi đâu kệ nó — player thật thường nằm trong iframe khác miền', () {
+      expect(
+        isHijackNavigation(
+          currentUrl: 'https://phim.nguonc.com/embed/abc',
+          targetUrl: 'https://cdn-video.com/play',
+          isMainFrame: false,
+          pageLoadedOnce: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('vẫn trong cùng site thì cho qua', () {
+      expect(
+        isHijackNavigation(
+          currentUrl: 'https://phim.nguonc.com/embed/abc',
+          targetUrl: 'https://phim.nguonc.com/embed/tap-2',
+          isMainFrame: true,
+          pageLoadedOnce: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('about:blank / data: không tính là điều hướng quảng cáo', () {
+      for (final u in ['about:blank', 'data:text/html,x', '']) {
+        expect(
+          isHijackNavigation(
+            currentUrl: 'https://phim.nguonc.com/embed/abc',
+            targetUrl: u,
+            isMainFrame: true,
+            pageLoadedOnce: true,
+          ),
+          isFalse,
+          reason: u,
+        );
+      }
+    });
+  });
 }
