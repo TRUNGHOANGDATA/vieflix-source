@@ -11,6 +11,10 @@ const List<String> kAdHosts = [
   'doubleclick.net', 'googlesyndication', 'google-analytics',
   'googletagmanager', 'g.doubleclick', 'histats', 'statcounter',
   'yandex.ru/metrika', 'facebook.net', 'connect.facebook',
+  // Guard chống-devtool của streamc.xyz: app đã vô hiệu bằng JS nên tải nó chỉ
+  // tổ chậm (~1.4s). Chặn luôn cho khỏi tải. (Không có onerror=blockPlayer nên
+  // chặn an toàn.) Trên Windows dựa vào JS vô hiệu; Android chặn tải qua đây.
+  'devtool-guard',
 ];
 
 /// Đuôi tên miền hai cấp hay gặp — để `nguonc.com.vn` không bị cắt thành `com.vn`.

@@ -28,16 +28,27 @@ List<StreamSource> streamSourcesOf(MovieDetail d) {
 /// cùng loại tiếng thì ưu tiên bản có link phát thẳng (m3u8) vì phát bằng trình
 /// phát của app, không phải trang embed.
 int defaultSourceIndex(List<StreamSource> servers) {
-  int? viet, vietHls, hls;
-  for (int i = 0; i < servers.length; i++) {
-    final s = servers[i];
-    final isViet = s.lang == 'Thuyết minh' || s.lang == 'Lồng tiếng';
-    final isHls = s.kind == StreamKind.hls;
-    if (isViet && isHls) vietHls ??= i;
-    if (isViet) viet ??= i;
-    if (isHls) hls ??= i;
+  // Hai tầng ưu tiên:
+  //   1) LOẠI TIẾNG (quan trọng nhất): Thuyết minh > Lồng tiếng > còn lại.
+  //   2) Trong CÙNG loại tiếng: bản phát thẳng (hls, vd phimapi) trước bản nhúng
+  //      (embed, vd nguonc) vì mở nhanh hơn nhiều và không dính quảng cáo.
+  // Nhờ vậy Thuyết minh LUÔN thắng; chỉ khi đồng hạng tiếng mới xét tốc độ.
+  int langRank(String lang) {
+    if (lang == 'Thuyết minh') return 0;
+    if (lang == 'Lồng tiếng') return 1;
+    return 2;
   }
-  return vietHls ?? viet ?? hls ?? 0;
+  int best = 0, bestLang = 99, bestKind = 99;
+  for (int i = 0; i < servers.length; i++) {
+    final lr = langRank(servers[i].lang);
+    final kr = servers[i].kind == StreamKind.hls ? 0 : 1;
+    if (lr < bestLang || (lr == bestLang && kr < bestKind)) {
+      best = i;
+      bestLang = lr;
+      bestKind = kr;
+    }
+  }
+  return best;
 }
 
 /// Vị trí cần tua tới khi bấm "Xem tiếp", tính bằng giây (0 = phát từ đầu).

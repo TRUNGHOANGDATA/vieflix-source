@@ -169,6 +169,16 @@ void main() {
           lang: lang, kind: kind, episodes: [_e('1')],
         );
 
+    test('THUYẾT MINH luôn thắng, kể cả khi bản kia phát thẳng nhanh hơn', () {
+      // nguonc Thuyết minh (embed, chậm) vs phimapi Vietsub (hls, nhanh).
+      // Ưu tiên TIẾNG cao hơn tốc độ -> phải chọn Thuyết minh.
+      final list = [
+        src('phimapi', 'Vietsub', StreamKind.hls),
+        src('nguonc', 'Thuyết minh', StreamKind.embed),
+      ];
+      expect(pick(list), 1);
+    });
+
     test('thuyết minh có link thẳng thắng thuyết minh embed', () {
       final list = [
         src('nguonc', 'Vietsub', StreamKind.embed),
