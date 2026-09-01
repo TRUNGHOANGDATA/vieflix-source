@@ -324,7 +324,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// vị trí / thời lượng / trạng thái phát ra.
   Future<void> _openNative(String url, double startAt) async {
     _closeNative();
-    final p = Player();
+    // Box Android yếu (vd KICKPI) phát HLS 1080p hay GIẬT vì mạng tải không kịp
+    // libmpv. Tăng bộ đệm đọc trước để chịu được mạng phập phù. Windows mặc định
+    // 32MB đã đủ nên không đụng (khỏi tốn RAM vô ích).
+    final p = Platform.isAndroid
+        ? Player(configuration: const PlayerConfiguration(bufferSize: 96 * 1024 * 1024))
+        : Player();
     final c = VideoController(p);
     _np = p;
     _nvc = c;
@@ -395,6 +400,21 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     try {
       await p.open(Media(toPlay), play: true);
       await p.setVolume(_vol * 100);
+      // Đọc trước theo THỜI GIAN: giữ sẵn ~30s phim để một nhịp mạng chậm không
+      // làm khựng hình. Chỉ box Android yếu mới cần; lỗi thì bỏ qua (không sống
+      // chết vì tinh chỉnh này).
+      if (Platform.isAndroid) {
+        try {
+          final plat = p.platform;
+          if (plat is NativePlayer) {
+            await plat.setProperty('cache', 'yes');
+            await plat.setProperty('cache-secs', '30');
+            await plat.setProperty('demuxer-readahead-secs', '30');
+          }
+        } catch (e) {
+          vlog('player', 'khong dat duoc cache mpv: $e');
+        }
+      }
       _resumeApplied = true; // đường native tự lo bằng _applyPendingSeek
       vlog('player', 'da mo native OK: ${toPlay == url ? "link goc" : "playlist da loc"}');
     } catch (e) {
