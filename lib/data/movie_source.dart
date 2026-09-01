@@ -92,6 +92,27 @@ class MergeDedup {
   }
 }
 
+/// Tập tên đã CHUẨN HOÁ của một phim, để so khớp cùng phim giữa hai nguồn.
+///
+/// nguonc hay gói NHIỀU tên (cách nhau bởi `,` `/` `|`) vào `original_name`
+/// (vd Conan: "Detective Conan, Case Closed, Meitantei Conan"), còn phimapi để
+/// gọn ("Detective Conan"). Ghép cả cụm rồi so bằng [mergeName] sẽ TRƯỢT. Nên
+/// tách thành TẬP tên (cả tên tiếng Việt lẫn từng tên gốc) rồi coi là khớp khi
+/// hai tập GIAO nhau ở ít nhất một tên. KHÔNG tách dấu ':' để tên phần/phụ đề
+/// (vd "Case Closed: The Crimson...") không lẫn với bản gốc.
+Set<String> nameCandidates(Movie m) {
+  final out = <String>{};
+  for (final raw in [m.name, m.originalName]) {
+    for (final part in raw.split(RegExp(r'[,/|]'))) {
+      final n = stripDiacritics(part)
+          .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+          .trim();
+      if (n.isNotEmpty) out.add(n);
+    }
+  }
+  return out;
+}
+
 /// Bộ lọc GHÉP nhiều chiều cho màn Thư viện. Mỗi chiều có thể null (= không lọc).
 ///
 /// phimapi lọc ghép được cả 4 chiều. nguonc chỉ lọc được MỘT chiều cấu trúc

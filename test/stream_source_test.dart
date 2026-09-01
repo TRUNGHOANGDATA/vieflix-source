@@ -147,6 +147,27 @@ void main() {
       expect(other.calls.first, 'search:My Bias, My Boss');
     });
 
+    test('khớp được khi nguồn gói NHIỀU tên vào original_name (kiểu Conan)', () async {
+      // nguonc: original_name là danh sách alias; phimapi để gọn một tên.
+      final primary = _d('conan',
+          [ServerGroup(serverName: 'Vietsub', items: [_e('1')])],
+          origin: 'Detective Conan, Case Closed, Meitantei Conan');
+      const other = 'pa:tham-tu-conan';
+      final src = _FakeSource(kSrcPhimApi,
+          results: [
+            _m('pa:conan-21', origin: 'Case Closed: The Crimson Love Letter'),
+            _m(other, origin: 'Detective Conan'),
+          ],
+          details: {
+            other: _d(other, [
+              ServerGroup(serverName: 'Thuyết Minh', items: [_e('Tập 01')]),
+            ], origin: 'Detective Conan'),
+          });
+      final list = await alternateStreamSources(primary: primary, others: [src]);
+      // Phải khớp bản gốc "Detective Conan", KHÔNG dính "Conan 21: ..."
+      expect(list.map((s) => s.label), ['phimapi · Thuyết minh']);
+    });
+
     test('cùng tên nhưng khác năm thì KHÔNG nhận (tránh nhầm mùa/bản làm lại)', () async {
       final primary = _d('phim-2025', [ServerGroup(serverName: 'Vietsub', items: [_e('1')])],
           origin: 'Same Show', year: '2025');

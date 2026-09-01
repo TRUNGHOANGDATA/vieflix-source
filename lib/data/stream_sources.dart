@@ -84,7 +84,7 @@ Future<List<StreamSource>> alternateStreamSources({
   required MovieDetail primary,
   required List<MovieSource> others,
 }) async {
-  final want = mergeName(primary.base);
+  final want = nameCandidates(primary.base);
   if (want.isEmpty) return [];
   final keyword =
       primary.base.originalName.trim().isNotEmpty ? primary.base.originalName : primary.name;
@@ -104,19 +104,16 @@ Future<List<StreamSource>> alternateStreamSources({
   return lists.expand((e) => e).toList();
 }
 
-Movie? _bestMatch(List<Movie> found, String want, String year) {
-  Movie? sameName;
+Movie? _bestMatch(List<Movie> found, Set<String> want, String year) {
+  Movie? nameOnly;
   for (final m in found) {
-    if (mergeName(m) != want) continue;
+    // Khớp khi TẬP tên giao nhau ở ít nhất một tên (so ĐÚNG cả tên, không phải
+    // chứa chuỗi, để "Conan" không dính "Conan 21: ...").
+    if (nameCandidates(m).intersection(want).isEmpty) continue;
     final y = m.year.trim();
-    // Khớp cả năm là chắc nhất -> nhận ngay.
-    if (year.isNotEmpty && y.isNotEmpty && y == year) return m;
-    sameName ??= m;
+    if (year.isNotEmpty && y.isNotEmpty && y == year) return m; // khớp cả năm -> chắc
+    if (year.isNotEmpty && y.isNotEmpty && y != year) continue; // năm lệch -> bỏ
+    nameOnly ??= m;
   }
-  // Chỉ khớp tên: nhận, trừ khi năm hai bên đều có và lệch nhau.
-  if (sameName != null) {
-    final y = sameName.year.trim();
-    if (year.isNotEmpty && y.isNotEmpty && y != year) return null;
-  }
-  return sameName;
+  return nameOnly;
 }

@@ -7,7 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 /// Phiên bản app hiện tại. MỖI lần phát hành bản mới phải TĂNG số này cho
 /// khớp tag trên GitHub (vd tag `v1.0.1` -> đặt '1.0.1').
-const String kAppVersion = '1.0.34';
+const String kAppVersion = '1.0.35';
 
 /// Repo GitHub PUBLIC chỉ dùng để chứa bản tải, dạng 'chu-repo/ten-repo'.
 /// Để rỗng nếu chưa cấu hình -> app bỏ qua kiểm tra cập nhật (không lỗi).
