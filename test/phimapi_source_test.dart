@@ -160,6 +160,35 @@ void main() {
     expect(ep.m3u8, 'https://v7.kkphimplayer7.com/x/index.m3u8');
   });
 
+  test('browse() ghép category+country+year vào query, đổi slug thể loại', () async {
+    late http.Request captured;
+    final client = MockClient((req) async {
+      captured = req;
+      return _json({'data': {'items': [], 'params': {'pagination': {'currentPage': 1, 'totalPages': 3}}}});
+    });
+    await PhimApiSource(client: client).browse(
+      const BrowseFilter(type: 'phim-bo', genre: 'hai', country: 'han-quoc', year: '2024'),
+      page: 2,
+    );
+    final u = captured.url.toString();
+    expect(u, contains('/v1/api/danh-sach/phim-bo'));
+    expect(u, contains('category=hai-huoc')); // 'hai' -> alias 'hai-huoc'
+    expect(u, contains('country=han-quoc'));
+    expect(u, contains('year=2024'));
+    expect(u, contains('page=2'));
+  });
+
+  test('browse() không chọn type -> dùng danh sách chung phim-moi', () async {
+    late http.Request captured;
+    final client = MockClient((req) async {
+      captured = req;
+      return _json({'data': {'items': []}});
+    });
+    await PhimApiSource(client: client).browse(const BrowseFilter(country: 'han-quoc'));
+    expect(captured.url.path, '/v1/api/danh-sach/phim-moi');
+    expect(captured.url.toString(), contains('country=han-quoc'));
+  });
+
   test('lỗi HTTP ném ApiException', () async {
     final client = MockClient((req) async => http.Response('nope', 500));
     expect(() => PhimApiSource(client: client).latest(),

@@ -43,6 +43,8 @@ class _FakeSource implements MovieSource {
   @override
   Future<Paginated<Movie>> byYear(String y, {int page = 1}) => _page('year', page);
   @override
+  Future<Paginated<Movie>> browse(BrowseFilter f, {int page = 1}) => _page('browse', page);
+  @override
   Future<List<Movie>> search(String k) async => pages[1] ?? [];
   @override
   Future<MovieDetail> detail(String slug) async {

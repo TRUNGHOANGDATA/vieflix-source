@@ -153,6 +153,21 @@ class PhimApiSource implements MovieSource {
       .items;
 
   @override
+  Future<Paginated<Movie>> browse(BrowseFilter f, {int page = 1}) async {
+    // phimapi lọc ghép được cả 4 chiều: type ở đường dẫn, còn lại là tham số.
+    // Không chọn type -> dùng danh sách chung 'phim-moi' (vẫn nhận đủ tham số lọc).
+    final base = f.type ?? 'phim-moi';
+    final qp = <String>['page=$page', 'limit=$_limit'];
+    if (f.genre != null) {
+      final g = _genreAlias[f.genre!] ?? f.genre!;
+      qp.add('category=${Uri.encodeQueryComponent(g)}');
+    }
+    if (f.country != null) qp.add('country=${Uri.encodeQueryComponent(f.country!)}');
+    if (f.year != null) qp.add('year=${Uri.encodeQueryComponent(f.year!)}');
+    return _parseV1(await _getJson('/v1/api/danh-sach/$base?${qp.join('&')}'));
+  }
+
+  @override
   Future<MovieDetail> detail(String slug) async {
     final bare = slug.startsWith(kPhimApiPrefix)
         ? slug.substring(kPhimApiPrefix.length)

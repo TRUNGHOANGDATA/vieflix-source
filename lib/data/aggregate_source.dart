@@ -98,6 +98,10 @@ class AggregateSource implements MovieSource {
       _merge(page, (s) => s.byYear(year, page: page));
 
   @override
+  Future<Paginated<Movie>> browse(BrowseFilter filter, {int page = 1}) =>
+      _merge(page, (s) => s.browse(filter, page: page));
+
+  @override
   Future<List<Movie>> search(String keyword) async {
     final results = await Future.wait(sources.map((s) async {
       try {

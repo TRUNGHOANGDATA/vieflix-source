@@ -36,6 +36,10 @@ abstract class MovieSource {
   Future<Paginated<Movie>> byYear(String year, {int page = 1});
   Future<List<Movie>> search(String keyword);
   Future<MovieDetail> detail(String slug);
+
+  /// Lọc GHÉP nhiều chiều (màn Thư viện). Nguồn không kham được combo này thì
+  /// NÉM lỗi để [AggregateSource] bỏ qua nó (không kéo cả danh mục xuống).
+  Future<Paginated<Movie>> browse(BrowseFilter filter, {int page = 1});
 }
 
 /// Bỏ dấu tiếng Việt (dùng để so tên phim giữa hai nguồn).
@@ -86,4 +90,43 @@ class MergeDedup {
     (_yearsOf[name] ??= <String>{}).add(year);
     return true;
   }
+}
+
+/// Bộ lọc GHÉP nhiều chiều cho màn Thư viện. Mỗi chiều có thể null (= không lọc).
+///
+/// phimapi lọc ghép được cả 4 chiều. nguonc chỉ lọc được MỘT chiều cấu trúc
+/// (type/genre/country) phía máy chủ + lọc `year` phía app; ghép 2 chiều cấu
+/// trúc trở lên thì nguonc không làm được (danh sách của nó không kèm thể loại/
+/// quốc gia) — lúc đó [AggregateSource] để nguonc tự lui, phimapi gánh.
+class BrowseFilter {
+  final String? type;    // phim-bo / phim-le / hoat-hinh / tv-shows
+  final String? genre;   // slug thể loại
+  final String? country; // slug quốc gia
+  final String? year;    // '2024'
+  const BrowseFilter({this.type, this.genre, this.country, this.year});
+
+  bool get isEmpty => type == null && genre == null && country == null && year == null;
+
+  /// Số chiều CẤU TRÚC (không tính năm) — nguonc lọc server được tối đa 1.
+  int get structuralCount =>
+      (type != null ? 1 : 0) + (genre != null ? 1 : 0) + (country != null ? 1 : 0);
+
+  BrowseFilter copyWith({
+    String? type, String? genre, String? country, String? year,
+    bool clearType = false, bool clearGenre = false,
+    bool clearCountry = false, bool clearYear = false,
+  }) =>
+      BrowseFilter(
+        type: clearType ? null : (type ?? this.type),
+        genre: clearGenre ? null : (genre ?? this.genre),
+        country: clearCountry ? null : (country ?? this.country),
+        year: clearYear ? null : (year ?? this.year),
+      );
+
+  @override
+  bool operator ==(Object o) =>
+      o is BrowseFilter &&
+      o.type == type && o.genre == genre && o.country == country && o.year == year;
+  @override
+  int get hashCode => Object.hash(type, genre, country, year);
 }

@@ -56,6 +56,8 @@ class _FakeSource implements MovieSource {
   Future<Paginated<Movie>> byCountry(String s, {int page = 1}) async => throw UnimplementedError();
   @override
   Future<Paginated<Movie>> byYear(String y, {int page = 1}) async => throw UnimplementedError();
+  @override
+  Future<Paginated<Movie>> browse(BrowseFilter f, {int page = 1}) async => throw UnimplementedError();
 }
 
 void main() {

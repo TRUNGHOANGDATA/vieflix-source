@@ -9,7 +9,7 @@ import 'package:app_xem_phim/models/paginated.dart';
 import 'package:app_xem_phim/screens/browse_screen.dart';
 import 'package:app_xem_phim/state/providers.dart';
 import 'package:app_xem_phim/widgets/lang_filter_row.dart';
-import 'package:app_xem_phim/widgets/tv_filter_bar.dart';
+import 'package:app_xem_phim/widgets/multi_filter_bar.dart';
 
 /// API giả: trả rỗng ngay, không chạm mạng.
 class _FakeApi extends NguoncApi {
@@ -49,7 +49,7 @@ void main() {
       (tester) async {
     await pumpBrowse(tester);
     final field = tester.getRect(find.byType(TextField));
-    final filters = tester.getRect(find.byType(TvFilterBar));
+    final filters = tester.getRect(find.byType(MultiFilterBar));
     // Cùng hàng: hai khối phải trùng nhau theo chiều dọc.
     expect(filters.top, lessThan(field.bottom));
     expect(filters.bottom, greaterThan(field.top));

@@ -91,6 +91,32 @@ class NguoncApi implements MovieSource {
   }
 
   @override
+  Future<Paginated<Movie>> browse(BrowseFilter f, {int page = 1}) async {
+    // nguonc chỉ lọc được MỘT chiều cấu trúc phía máy chủ. Ghép 2 chiều trở lên
+    // -> ném lỗi để AggregateSource bỏ qua nguonc (phimapi gánh).
+    if (f.structuralCount >= 2) {
+      throw ApiException('nguonc không lọc ghép nhiều chiều');
+    }
+    // Một chiều cấu trúc (nếu có) đi phía máy chủ; năm lọc phía app vì danh sách
+    // nguonc CÓ trường year (nhưng KHÔNG có thể loại/quốc gia).
+    Paginated<Movie> base;
+    if (f.genre != null) {
+      base = await byGenre(f.genre!, page: page);
+    } else if (f.country != null) {
+      base = await byCountry(f.country!, page: page);
+    } else if (f.type != null) {
+      base = await listByType(f.type!, page: page);
+    } else if (f.year != null) {
+      return byYear(f.year!, page: page); // chỉ lọc năm -> có endpoint riêng
+    } else {
+      return latest(page: page);
+    }
+    if (f.year == null) return base;
+    final items = base.items.where((m) => m.year.trim() == f.year).toList();
+    return Paginated(items: items, currentPage: base.currentPage, totalPage: base.totalPage);
+  }
+
+  @override
   Future<MovieDetail> detail(String slug) async {
     final j = await _getJson('/film/$slug');
     final movie = (j['movie'] as Map?)?.cast<String, dynamic>();

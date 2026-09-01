@@ -274,21 +274,12 @@ class BrowseState {
 }
 
 class BrowseNotifier extends StateNotifier<BrowseState> {
-  final MovieSource api;
-  final BrowseQuery q;
-  BrowseNotifier(this.api, this.q)
+  // Nhận HÀM tải trang để dùng chung cho cả lọc một-chiều (BrowseQuery) lẫn lọc
+  // ghép nhiều-chiều (BrowseFilter) — logic phân trang y hệt nhau.
+  final Future<Paginated<Movie>> Function(int page) _fetchPage;
+  BrowseNotifier(this._fetchPage)
       : super(BrowseState(items: [], page: 0, totalPage: 1, loading: false)) {
     loadMore();
-  }
-
-  Future<Paginated<Movie>> _fetchPage(int p) {
-    switch (q.kind) {
-      case 'all': return api.latest(page: p);
-      case 'type': return api.listByType(q.value, page: p);
-      case 'genre': return api.byGenre(q.value, page: p);
-      case 'country': return api.byCountry(q.value, page: p);
-      default: return api.byYear(q.value, page: p);
-    }
   }
 
   // Tải NHIỀU trang song song (mặc định 3) cho nhanh — nhất là khi lọc tiếng
@@ -310,5 +301,26 @@ class BrowseNotifier extends StateNotifier<BrowseState> {
   }
 }
 
+Future<Paginated<Movie>> _fetchQuery(MovieSource api, BrowseQuery q, int p) {
+  switch (q.kind) {
+    case 'all': return api.latest(page: p);
+    case 'type': return api.listByType(q.value, page: p);
+    case 'genre': return api.byGenre(q.value, page: p);
+    case 'country': return api.byCountry(q.value, page: p);
+    default: return api.byYear(q.value, page: p);
+  }
+}
+
 final browseProvider = StateNotifierProvider.family<BrowseNotifier, BrowseState, BrowseQuery>(
-    (ref, q) => BrowseNotifier(ref.read(apiProvider), q));
+    (ref, q) {
+  final api = ref.watch(apiProvider);
+  return BrowseNotifier((p) => _fetchQuery(api, q, p));
+});
+
+// Lọc GHÉP nhiều chiều cho màn Thư viện. apiProvider gộp nguonc + phimapi; nguồn
+// nào không kham combo thì tự lui (xem AggregateSource.browse).
+final filterBrowseProvider =
+    StateNotifierProvider.family<BrowseNotifier, BrowseState, BrowseFilter>((ref, f) {
+  final api = ref.watch(apiProvider);
+  return BrowseNotifier((p) => api.browse(f, page: p));
+});

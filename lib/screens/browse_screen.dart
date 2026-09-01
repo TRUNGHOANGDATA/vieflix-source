@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/movie.dart';
 import '../state/providers.dart';
+import '../data/movie_source.dart';
 import '../theme/app_theme.dart';
 import '../widgets/movie_card.dart';
 import '../widgets/movie_row.dart';
-import '../widgets/tv_filter_bar.dart';
+import '../widgets/multi_filter_bar.dart';
 import '../widgets/lang_filter_row.dart';
 import '../widgets/tv_focusable.dart';
 import '../widgets/async_view.dart';
@@ -24,7 +25,7 @@ class BrowseScreen extends ConsumerStatefulWidget {
 }
 
 class _BrowseScreenState extends ConsumerState<BrowseScreen> {
-  BrowseQuery _q = const BrowseQuery('all', '');
+  BrowseFilter _filter = const BrowseFilter();
   String _keyword = '';
   final Set<String> _langs = {}; // rỗng = mọi loại; phude/thuyetminh/longtieng (chọn nhiều)
   final _controller = TextEditingController();
@@ -44,7 +45,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
     _scroll.addListener(() {
       if (_scroll.hasClients &&
           _scroll.position.pixels > _scroll.position.maxScrollExtent - 400) {
-        ref.read(browseProvider(_q).notifier).loadMore();
+        ref.read(filterBrowseProvider(_filter).notifier).loadMore();
       }
     });
   }
@@ -113,7 +114,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
     // thì vẫn hiện 2 hàng gợi ý và lọc trên đúng 20 phim đã tải -> chọn "Thuyết
     // minh" xong chỉ còn 3 phim, trông như nguồn chỉ có 3 phim. Lưới thì gom
     // nhiều trang (BrowseNotifier tải 3 trang/lượt) nên lọc ra đủ phim.
-    final browsing = _q.kind != 'all' || _langs.isNotEmpty;
+    final browsing = !_filter.isEmpty || _langs.isNotEmpty;
 
     return FocusTraversalGroup(
       child: Column(children: [
@@ -128,11 +129,10 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
             const SizedBox(width: 12),
             Expanded(
               flex: 6,
-              child: TvFilterBar(
-                padding: EdgeInsets.zero,
-                current: _q,
-                onChanged: (q) => setState(() {
-                  _q = q;
+              child: MultiFilterBar(
+                current: _filter,
+                onChanged: (f) => setState(() {
+                  _filter = f;
                   // Chọn bộ lọc -> chuyển sang chế độ duyệt: xoá từ khoá đang tìm.
                   _keyword = '';
                   _controller.clear();
@@ -275,12 +275,12 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
       );
 
   Widget _browseBody() {
-    final st = ref.watch(browseProvider(_q));
+    final st = ref.watch(filterBrowseProvider(_filter));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (st.page < st.totalPage && !st.loading && _scroll.hasClients &&
           _scroll.position.maxScrollExtent < 400) {
-        ref.read(browseProvider(_q).notifier).loadMore();
+        ref.read(filterBrowseProvider(_filter).notifier).loadMore();
       }
     });
     final items = _applyLang(st.items);
