@@ -38,20 +38,31 @@ jobs:
       - name: Build iOS (chưa ký)
         run: flutter build ios --release --no-codesign
 
-      - name: Đóng gói thành .ipa (dùng ditto cho AltStore đọc được)
+      # AltStore ký lại app bằng `ldid`. Với bản build --no-codesign, các
+      # framework để lại chữ ký DỞ/thiếu -> ldid vỡ:
+      #   ldid.cpp(1461): _assert(): end >= size - 0x10
+      # Ad-hoc ký sạch (codesign -s -) từng framework/dylib rồi tới app: chữ ký
+      # thành hợp lệ, ldid parse và thay được. KHÔNG xoá _CodeSignature — thiếu
+      # nó ldid càng vỡ.
+      - name: Ad-hoc ký lại toàn bộ (để AltStore ký đè được)
+        run: |
+          APP=build/ios/iphoneos/Runner.app
+          if [ -d "$APP/Frameworks" ]; then
+            find "$APP/Frameworks" -name "*.dylib" -exec codesign --force --sign - {} \;
+            find "$APP/Frameworks" -maxdepth 1 -name "*.framework" -exec codesign --force --sign - {} \;
+          fi
+          codesign --force --sign - "$APP"
+          codesign -dv "$APP" 2>&1 | head -5
+
+      - name: Đóng gói thành .ipa (ditto — zip thường AltStore hay không đọc được)
         run: |
           cd build/ios/iphoneos
           rm -rf Payload VieFlix.ipa
           mkdir -p Payload
           cp -R Runner.app Payload/Runner.app
-          # Xoá chữ ký ad-hoc sẵn có: app CHƯA ký, AltStore ký lại khi cài.
-          rm -rf Payload/Runner.app/_CodeSignature
-          # `ditto -c -k` tạo zip chuẩn của Apple (AltStore/ZIPFoundation đọc
-          # được), --keepParent giữ thư mục Payload ở gốc, --norsrc/--noextattr
-          # bỏ resource-fork + extended attribute khiến archive lỗi format.
           ditto -c -k --norsrc --noextattr --keepParent Payload VieFlix.ipa
           echo "Đã tạo: $(pwd)/VieFlix.ipa"
-          unzip -l VieFlix.ipa | head -8
+          unzip -l VieFlix.ipa | head -6
 
       - name: Đưa .ipa ra Artifacts để tải về
         uses: actions/upload-artifact@v4
