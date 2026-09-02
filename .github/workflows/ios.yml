@@ -38,6 +38,34 @@ jobs:
       - name: Build iOS (chưa ký)
         run: flutter build ios --release --no-codesign
 
+      # `ldid` của AltStore chỉ đọc được Mach-O MỘT kiến trúc. Bản build để lại
+      # vài binary "fat" (nhiều kiến trúc) — đo thật trên .ipa thấy
+      # App.framework/App và objective_c.framework/objective_c — khiến ldid đọc
+      # header fat như header thường, offset vọt ra ngoài file rồi vỡ:
+      #   ldid.cpp(1461): _assert(): end >= size - 0x10
+      # Cắt còn arm64 TRƯỚC khi ký (lipo làm hỏng chữ ký nên phải ký lại sau).
+      - name: Cắt binary về một kiến trúc arm64 (ldid không đọc được file fat)
+        run: |
+          APP=build/ios/iphoneos/Runner.app
+          thin_one() {
+            f="$1"
+            [ -f "$f" ] || return 0
+            if lipo -info "$f" 2>/dev/null | grep -q "Architectures in the fat file"; then
+              echo "  cat fat -> arm64: $f"
+              lipo "$f" -thin arm64 -output "$f.thin" && mv -f "$f.thin" "$f"
+            fi
+          }
+          thin_one "$APP/Runner"
+          if [ -d "$APP/Frameworks" ]; then
+            for fw in "$APP"/Frameworks/*.framework; do
+              [ -d "$fw" ] || continue
+              thin_one "$fw/$(basename "$fw" .framework)"
+            done
+            for dy in "$APP"/Frameworks/*.dylib; do thin_one "$dy"; done
+          fi
+          echo "--- con file fat nao khong (phai TRONG) ---"
+          find "$APP" -type f -exec sh -c 'lipo -info "$1" 2>/dev/null | grep -q "fat file" && echo "CON FAT: $1"' _ {} \; || true
+
       # AltStore ký lại app bằng `ldid`. Với bản build --no-codesign, các
       # framework để lại chữ ký DỞ/thiếu -> ldid vỡ:
       #   ldid.cpp(1461): _assert(): end >= size - 0x10
