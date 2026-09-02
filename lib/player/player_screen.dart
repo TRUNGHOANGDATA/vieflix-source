@@ -1020,6 +1020,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         onHover: (_) => _onHover(),
         child: Stack(children: [
         Positioned.fill(child: _native ? _nativeVideo() : _webView()),
+        // PC: BẤM VÀO PHIM để tạm dừng/phát như trình phát thường. Lớp này nằm
+        // DƯỚI thanh điều khiển, bảng chọn nguồn và hộp báo lỗi (chúng ở SAU
+        // trong Stack nên được bấm trước — nút vẫn ăn), chỉ bắt cú bấm vào vùng
+        // phim. Chỉ bật trên desktop; TV dùng nút OK trên remote để tạm dừng.
+        if (!Platform.isAndroid)
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _togglePlay,
+            ),
+          ),
         // Logo góc kiểu kênh truyền hình: nằm im góc trên-phải suốt cả phim, mờ
         // 40%, sáng rõ khi thanh điều khiển hiện. Các lớp bọc (SafeArea/Align/
         // Padding) không "ăn" chuột, còn ChannelBug tự bọc IgnorePointer, nên bấm
