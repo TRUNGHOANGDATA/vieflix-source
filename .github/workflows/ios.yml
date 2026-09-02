@@ -38,14 +38,20 @@ jobs:
       - name: Build iOS (chưa ký)
         run: flutter build ios --release --no-codesign
 
-      - name: Đóng gói thành .ipa
+      - name: Đóng gói thành .ipa (dùng ditto cho AltStore đọc được)
         run: |
           cd build/ios/iphoneos
+          rm -rf Payload VieFlix.ipa
           mkdir -p Payload
           cp -R Runner.app Payload/Runner.app
-          zip -qry VieFlix.ipa Payload
+          # Xoá chữ ký ad-hoc sẵn có: app CHƯA ký, AltStore ký lại khi cài.
+          rm -rf Payload/Runner.app/_CodeSignature
+          # `ditto -c -k` tạo zip chuẩn của Apple (AltStore/ZIPFoundation đọc
+          # được), --keepParent giữ thư mục Payload ở gốc, --norsrc/--noextattr
+          # bỏ resource-fork + extended attribute khiến archive lỗi format.
+          ditto -c -k --norsrc --noextattr --keepParent Payload VieFlix.ipa
           echo "Đã tạo: $(pwd)/VieFlix.ipa"
-          ls -lh VieFlix.ipa
+          unzip -l VieFlix.ipa | head -8
 
       - name: Đưa .ipa ra Artifacts để tải về
         uses: actions/upload-artifact@v4
