@@ -1,0 +1,55 @@
+# Build file cài iOS (.ipa) trên máy ảo macOS của GitHub — MIỄN PHÍ.
+# KHÔNG ký (--no-codesign); AltStore sẽ tự ký bằng Apple ID của bạn khi cài.
+#
+# Cách dùng:
+#   1) Vào tab "Actions" trên GitHub -> chọn "Build iOS IPA" -> "Run workflow".
+#   2) Chờ ~10-15 phút, tải "VieFlix-ios-ipa" ở mục Artifacts của lần chạy.
+#   3) Đưa file .ipa vào iPad bằng AltStore (AltServer trên Windows).
+#
+# Vì sao gói .ipa thủ công: `flutter build ios --no-codesign` chỉ ra Runner.app,
+# chưa phải .ipa. Bọc app vào thư mục Payload/ rồi nén lại thành .ipa — đây là
+# .ipa chưa ký, AltStore ký lại lúc cài nên hợp lệ.
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:        # bấm nút chạy tay trên GitHub
+  push:
+    tags: ['v*']            # đẩy tag phiên bản cũng build luôn
+
+jobs:
+  build-ipa:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cài Flutter (khớp bản đang dùng)
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.9'
+          channel: stable
+          cache: true
+
+      - name: Lấy gói phụ thuộc
+        run: flutter pub get
+
+      - name: Kiểm tra nhanh (không chặn build nếu chỉ cảnh báo)
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
+
+      - name: Build iOS (chưa ký)
+        run: flutter build ios --release --no-codesign
+
+      - name: Đóng gói thành .ipa
+        run: |
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -R Runner.app Payload/Runner.app
+          zip -qry VieFlix.ipa Payload
+          echo "Đã tạo: $(pwd)/VieFlix.ipa"
+          ls -lh VieFlix.ipa
+
+      - name: Đưa .ipa ra Artifacts để tải về
+        uses: actions/upload-artifact@v4
+        with:
+          name: VieFlix-ios-ipa
+          path: build/ios/iphoneos/VieFlix.ipa
+          if-no-files-found: error

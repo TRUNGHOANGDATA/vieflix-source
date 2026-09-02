@@ -57,6 +57,10 @@ class UpdateChecker {
       }
       final notes = (j['body'] ?? '').toString();
 
+      // iOS/iPadOS: không tự cài được (không có App Store, không sideload từ app),
+      // nên bỏ qua kiểm cập nhật -> không hiện nút gì. Bản mới đẩy qua AltStore.
+      if (Platform.isIOS) return null;
+
       if (Platform.isAndroid) {
         if (apkUrl != null) {
           return UpdateInfo(version: latest, notes: notes, downloadUrl: apkUrl, isApk: true);

@@ -198,7 +198,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// của app: bỏ được trang embed, và quan trọng hơn là CẮT ĐƯỢC quảng cáo chèn
   /// trong luồng — thứ mà trang embed của nguồn không cho bỏ qua.
   bool _canNative(Episode ep) =>
-      (Platform.isWindows || Platform.isAndroid) &&
+      (Platform.isWindows || Platform.isAndroid || Platform.isIOS) &&
       ep.m3u8.isNotEmpty &&
       !_hlsFailed;
 
@@ -327,7 +327,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     // Box Android yếu (vd KICKPI) phát HLS 1080p hay GIẬT vì mạng tải không kịp
     // libmpv. Tăng bộ đệm đọc trước để chịu được mạng phập phù. Windows mặc định
     // 32MB đã đủ nên không đụng (khỏi tốn RAM vô ích).
-    final p = Platform.isAndroid
+    final mobile = Platform.isAndroid || Platform.isIOS;
+    final p = mobile
         ? Player(configuration: const PlayerConfiguration(bufferSize: 96 * 1024 * 1024))
         : Player();
     final c = VideoController(p);
@@ -403,7 +404,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       // Đọc trước theo THỜI GIAN: giữ sẵn ~30s phim để một nhịp mạng chậm không
       // làm khựng hình. Chỉ box Android yếu mới cần; lỗi thì bỏ qua (không sống
       // chết vì tinh chỉnh này).
-      if (Platform.isAndroid) {
+      if (mobile) {
         try {
           final plat = p.platform;
           if (plat is NativePlayer) {
