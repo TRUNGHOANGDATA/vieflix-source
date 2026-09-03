@@ -11,11 +11,16 @@ const List<String> kAdHosts = [
   'doubleclick.net', 'googlesyndication', 'google-analytics',
   'googletagmanager', 'g.doubleclick', 'histats', 'statcounter',
   'yandex.ru/metrika', 'facebook.net', 'connect.facebook',
-  // Guard chống-devtool của streamc.xyz: app đã vô hiệu bằng JS nên tải nó chỉ
-  // tổ chậm (~1.4s). Chặn luôn cho khỏi tải. (Không có onerror=blockPlayer nên
-  // chặn an toàn.) Trên Windows dựa vào JS vô hiệu; Android chặn tải qua đây.
-  'devtool-guard',
 ];
+
+/// Host CHỈ chặn ở tầng ĐIỀU HƯỚNG, KHÔNG chặn tải tài nguyên.
+///
+/// `devtool-guard.bundle.js` của streamc.xyz đã bị vô hiệu bằng JS rồi, chặn tải
+/// thêm chỉ để đỡ ~1.4s. Nhưng ContentBlocker chỉ chạy trên iOS/Android — Windows
+/// thì không — nên nó tạo ra một khác biệt giữa hai nền tảng ngay trên trang phim,
+/// mà iPad lại đang tắc đúng ở khâu dữ liệu không về. Bỏ chặn cho hai bên giống
+/// nhau; tốc độ đổi lấy sự chắc chắn.
+const List<String> _khongChanTaiVe = ['devtool-guard'];
 
 /// Đuôi tên miền hai cấp hay gặp — để `nguonc.com.vn` không bị cắt thành `com.vn`.
 const _twoLevelTlds = {
@@ -68,15 +73,17 @@ bool isHijackNavigation({
 
 bool isAdUrl(String url) {
   final u = url.toLowerCase();
-  for (final h in kAdHosts) {
+  for (final h in [...kAdHosts, ..._khongChanTaiVe]) {
     if (u.contains(h)) return true;
   }
   return false;
 }
 
 /// Regex url-filter cho ContentBlocker (thuần, dễ test).
-List<String> adUrlFilters() =>
-    kAdHosts.map((h) => '.*${RegExp.escape(h)}.*').toList();
+List<String> adUrlFilters() => kAdHosts
+    .where((h) => !_khongChanTaiVe.contains(h))
+    .map((h) => '.*${RegExp.escape(h)}.*')
+    .toList();
 
 /// ContentBlocker rules: chặn tải mọi resource khớp host QC.
 /// LƯU Ý: ContentBlocker chỉ hỗ trợ trên Android/iOS/macOS. Trên Windows/Linux
@@ -225,6 +232,49 @@ const String kAntiAdUserScript = r'''
       };
       if (navigator.platform !== 'Win32') fake('platform', 'Win32');
       if (navigator.maxTouchPoints > 0) fake('maxTouchPoints', 0);
+    } catch (e) {}
+
+    // -1b) GHI LẠI MỌI REQUEST HỎNG. Không có máy Mac để cắm Safari Web Inspector
+    //      vào iPad, nên tự dựng "tab Network" tí hon: vá fetch và XHR, hỏng cái
+    //      nào ghi cái đó. Đây là thứ duy nhất trả lời được câu "dữ liệu không về
+    //      thì tắc ở request nào".
+    try {
+      if (!window.__vfNet) {
+        window.__vfNet = [];
+        var note = function (how, url, what) {
+          try {
+            if (window.__vfNet.length < 10) {
+              window.__vfNet.push(how + ' ' + what + ' ' + String(url).slice(-80));
+            }
+          } catch (e) {}
+        };
+        var of = window.fetch;
+        if (of) {
+          window.fetch = function (input, init) {
+            var u = (input && input.url) ? input.url : input;
+            var pr;
+            try { pr = of.apply(this, arguments); } catch (e) { note('fetch', u, 'nem:' + e); throw e; }
+            return pr.then(function (r) {
+              if (!r.ok) note('fetch', u, 'HTTP' + r.status);
+              return r;
+            }, function (e) { note('fetch', u, 'hong:' + e); throw e; });
+          };
+        }
+        var OX = window.XMLHttpRequest;
+        if (OX) {
+          var op = OX.prototype.open, sd = OX.prototype.send;
+          OX.prototype.open = function (m, u) { this.__vfUrl = u; return op.apply(this, arguments); };
+          OX.prototype.send = function () {
+            var self = this;
+            self.addEventListener('error', function () { note('xhr', self.__vfUrl, 'hong'); });
+            self.addEventListener('abort', function () { note('xhr', self.__vfUrl, 'bi huy'); });
+            self.addEventListener('load', function () {
+              if (self.status >= 400) note('xhr', self.__vfUrl, 'HTTP' + self.status);
+            });
+            return sd.apply(this, arguments);
+          };
+        }
+      }
     } catch (e) {}
 
     // -1) GOM LỖI JS của trang. Console của trang bị bịt ở phần dưới (để qua

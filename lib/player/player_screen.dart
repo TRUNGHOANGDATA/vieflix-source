@@ -1395,8 +1395,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     jwErr: cut(window.__vfJwErr, 150),
     // --- WebView giải được codec gì ---
     codec: canPlay,
+    // đã nhận được đoạn dữ liệu nào chưa (0 = SourceBuffer rỗng)
+    vBuf: (v && v.buffered) ? v.buffered.length : null,
     // --- tài nguyên nào tải hỏng ---
-    errs: (window.__vfErrors || []).slice(0, 5)
+    errs: (window.__vfErrors || []).slice(0, 5),
+    // --- REQUEST nào hỏng: thứ duy nhất trả lời "vì sao dữ liệu không về" ---
+    net: (window.__vfNet || []).slice(0, 8)
   });
 })()
 ''';
