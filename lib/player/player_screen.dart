@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:media_kit/media_kit.dart';
 import '../data/hls_source.dart';
+import '../data/referer_gate.dart';
 import '../data/app_log.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../main.dart' show webViewEnvironment;
@@ -170,7 +171,14 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver {
   InAppWebViewController? _c;
   late int _idx;
-  late String _url;
+  /// Trang embed đang xem. Khởi tạo rỗng chứ KHÔNG `late`: [_setEmbedUrl] đọc
+  /// giá trị cũ để biết có phải đổi trang hay không, kể cả ở lần gọi đầu tiên.
+  String _url = '';
+
+  /// Link THẬT đưa cho WebView. Thường bằng [_url], nhưng với nguồn chặn
+  /// hotlink thì là trang cổng nội bộ tự nhảy sang [_url] để trình duyệt sinh
+  /// Referer (xem [RefererGate]). null = đang dựng cổng, chưa nạp được.
+  String? _navUrl;
   late int _srcIdx;          // nguồn đang phát (chỉ số trong widget.sources)
   bool _srcPanel = false;    // đang mở bảng chọn nguồn
 
@@ -250,7 +258,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             widget.sourceIndex >= widget.sources.length)
         ? 0
         : widget.sourceIndex;
-    _url = widget.embedUrl;
+    _setEmbedUrl(widget.embedUrl);
     _resumeTo = widget.startPosition;
     _resumeApplied = widget.startPosition <= 2;
     // ESC (PC) / phím remote (TV)
@@ -297,6 +305,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _pollT?.cancel();
     _closeNative();
     HlsPreparer.shutdown(); // tắt máy chủ playlist nội bộ khi rời trình phát
+    RefererGate.shutdown(); // và cả cổng Referer
     _nextT?.cancel();
     super.dispose();
   }
@@ -477,10 +486,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final keep = _pos;
     _hlsFailed = true;
     _closeNative();
-    setState(() {
-      _native = false;
-      _url = ep.embed;
-    });
+    setState(() => _native = false);
+    _setEmbedUrl(ep.embed);
     _resumeTo = keep;
     _resumeApplied = keep <= 2;
     _resumeTries = 0;
@@ -841,6 +848,32 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _loadEpisode(ep, 0);
   }
 
+  /// Đặt trang embed cần xem, rồi tính link thật để nạp.
+  ///
+  /// Nguồn chặn hotlink (streamc.xyz) đòi có Referer, mà header Referer tự đặt
+  /// thì WebView2 trên Windows vứt bỏ — nên phải đi vòng qua [RefererGate] để
+  /// chính trình duyệt sinh Referer. Chi tiết nằm trong tài liệu của lớp đó.
+  ///
+  /// [viaController] = true khi WebView đã có sẵn (đổi tập): nạp đè bằng
+  /// controller cho nhanh, khỏi dựng lại cả WebView.
+  Future<void> _setEmbedUrl(String url, {bool viaController = false}) async {
+    if (_url != url) {
+      _url = url;
+      if (!viaController) {
+        _navUrl = null; // đừng để WebView kịp nạp lại link của tập cũ
+        if (mounted) setState(() {});
+      }
+    }
+    final nav = await RefererGate.urlFor(url);
+    if (!mounted || _url != url) return; // đã đổi tập/nguồn trong lúc chờ
+    if (viaController && _c != null) {
+      _navUrl = nav;
+      await _c!.loadUrl(urlRequest: URLRequest(url: WebUri(nav)));
+    } else {
+      setState(() => _navUrl = nav);
+    }
+  }
+
   /// Nạp một tập: ưu tiên link m3u8 (player native), không có thì trang embed.
   void _loadEpisode(Episode ep, double startAt) {
     _pageLoadedOnce = false; // trang mới, cho phép nó tự chuyển hướng lúc đầu
@@ -853,8 +886,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       _closeNative();
       setState(() => _native = false);
     }
-    setState(() => _url = ep.embed);
-    _c?.loadUrl(urlRequest: URLRequest(url: WebUri(ep.embed)));
+    _setEmbedUrl(ep.embed, viaController: true);
   }
 
   /// Đổi sang nguồn khác, GIỮ NGUYÊN tập và vị trí đang xem.
@@ -934,7 +966,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               scale: 1.0,
               onPressed: () {
                 setState(() => _webError = null);
-                _c?.loadUrl(urlRequest: URLRequest(url: WebUri(_url)));
+                _setEmbedUrl(_url, viaController: true);
               },
               builder: (f) => _errBtn('Thử lại', f, dam: false),
             ),
@@ -1243,10 +1275,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   Widget _webView() {
+    final nav = _navUrl;
+    if (nav == null) {
+      // Đang dựng cổng Referer (vài mili giây). Nền đen cho liền mạch.
+      return const ColoredBox(
+        color: Colors.black,
+        child: Center(child: CircularProgressIndicator(color: kRed)),
+      );
+    }
     final w = InAppWebView(
               // Windows: môi trường WebView2 đã mở khóa autoplay (main.dart).
               webViewEnvironment: webViewEnvironment,
-              initialUrlRequest: URLRequest(url: WebUri(_url)),
+              initialUrlRequest: URLRequest(url: WebUri(nav)),
               initialSettings: InAppWebViewSettings(
                 contentBlockers: adContentBlockers(),
                 javaScriptCanOpenWindowsAutomatically: false,
@@ -1343,6 +1383,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               // Cầu nối có cờ `window.__vfBridge` nên tiêm lại nhiều lần vô hại;
               // Android vẫn chạy bằng userScript như cũ.
               onLoadStop: (c, url) async {
+                // Trang cổng chỉ là bàn đạp, chưa phải trang phim: đừng tính là
+                // "đã tải xong" — nếu tính, cú nhảy sang streamc.xyz ngay sau đó
+                // sẽ bị luật chặn quảng cáo cướp trang bắt nhầm. Cũng chẳng có
+                // gì để tiêm vào đó.
+                if (RefererGate.isGateUrl(url?.toString() ?? '')) return;
                 _pageLoadedOnce = true;
                 if (_webError != null && mounted) {
                   setState(() => _webError = null); // tải lại được rồi
