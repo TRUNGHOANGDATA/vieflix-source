@@ -10,6 +10,7 @@ import '../data/hls_source.dart';
 import '../data/referer_gate.dart';
 import '../data/app_log.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../main.dart' show webViewEnvironment;
 import '../models/episode.dart';
 import '../models/stream_source.dart';
@@ -264,6 +265,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         ? 0
         : widget.sourceIndex;
     _setEmbedUrl(widget.embedUrl);
+    // Giữ màn hình sáng suốt lúc ở trong trình phát. media_kit chỉ giữ cho
+    // trình phát native CỦA NÓ, nên đường WebView (nguồn nguonc) bị máy tự tắt
+    // màn hình giữa chừng khi lâu không chạm. Buộc theo MÀN HÌNH TRÌNH PHÁT
+    // thay vì theo trạng thái đang phát: đơn giản, và trả lại ở dispose.
+    WakelockPlus.enable().catchError((_) {});
     _resumeTo = widget.startPosition;
     _resumeApplied = widget.startPosition <= 2;
     // ESC (PC) / phím remote (TV)
@@ -312,6 +318,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     HlsPreparer.shutdown(); // tắt máy chủ playlist nội bộ khi rời trình phát
     _gateT?.cancel();
     RefererGate.shutdown(); // và cả cổng Referer
+    WakelockPlus.disable().catchError((_) {}); // cho màn hình được tắt lại
     _nextT?.cancel();
     super.dispose();
   }
