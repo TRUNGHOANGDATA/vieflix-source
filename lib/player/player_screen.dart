@@ -1397,14 +1397,22 @@ JSON.stringify({
                 mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
                 domStorageEnabled: true,
                 databaseEnabled: true,
-                // KHÔNG khai man trên iOS. Trang embed của nguonc TỰ CHIA NHÁNH
-                // theo máy Apple:
-                //   const isIOS = /iphone|ipod|ipad/i.test(navigator.userAgent) || ...
+                // UA giả kiểu máy tính cho MỌI nền tảng, KỂ CẢ iOS. Nghe ngược
+                // đời, nhưng đo trên iPad rồi: trang embed của nguonc tự chia
+                // nhánh theo máy Apple —
+                //   const isApple = isIOS || isMac;
                 //   window.streamURL = '/' + sUb + (isApple ? '' : '?d=1');
-                // Đưa UA Windows vào iPad là ép nó đi nhánh sai -> trang tự báo
-                // "Đã xảy ra lỗi khi phát video". Trên Windows/Android thì UA giả
-                // vẫn cần, để trang trả giao diện máy tính thay vì bản rút gọn.
-                userAgent: Platform.isIOS ? null : _kDesktopUa,
+                // — và NHÁNH APPLE KHÔNG CHẠY ĐƯỢC trong WebView nhúng: luồng
+                // đứng ở "0 seconds of 0 seconds" quay mãi. Nhật ký từ iPad cho
+                // thấy WKWebView có MediaSource (mse=true) nhưng KHÔNG có
+                // ServiceWorker (sw=false) — Safari thật thì có, nên mở bằng
+                // Safari lại xem được. Nhánh không-Apple chỉ cần MediaSource,
+                // thứ iPad có sẵn: trên Windows đo được currentSrc là `blob:`
+                // tức đang phát qua MSE, chạy ngon.
+                //
+                // Bản 1.0.39 từng đổi iOS sang UA thật cho "đúng", và đó CHÍNH
+                // LÀ thứ làm nguonc chết trên iPad. Đừng sửa lại lần nữa.
+                userAgent: _kDesktopUa,
               ),
               initialUserScripts: UnmodifiableListView([
                 UserScript(
