@@ -209,6 +209,24 @@ const String kAutoPlayScript = r'''
 const String kAntiAdUserScript = r'''
 (function () {
   try {
+    // -2) KHAI MÁY TÍNH CHO TRỌN VẸN. Đặt userAgent kiểu Windows là CHƯA ĐỦ trên
+    //     iPad: trang embed của nguonc còn dò thêm
+    //         navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+    //     mà iPadOS khai đúng như vậy (platform 'MacIntel', 5 điểm chạm), nên nó
+    //     vẫn xếp iPad vào máy Apple rồi đưa luồng của nhánh Apple — nhánh cần
+    //     ServiceWorker, thứ WebView nhúng vĩnh viễn không có, dẫn tới đứng ở
+    //     "0 seconds of 0 seconds" quay mãi. Nhánh còn lại chỉ cần MediaSource,
+    //     iPad có sẵn. Đây là DÒ THIẾT BỊ cho hợp máy, không phải lớp bảo vệ nào.
+    try {
+      var fake = function (k, v) {
+        try { Object.defineProperty(navigator, k, {
+          configurable: true, get: function () { return v; }
+        }); } catch (e) {}
+      };
+      if (navigator.platform !== 'Win32') fake('platform', 'Win32');
+      if (navigator.maxTouchPoints > 0) fake('maxTouchPoints', 0);
+    } catch (e) {}
+
     // -1) GOM LỖI JS của trang. Console của trang bị bịt ở phần dưới (để qua
     //     mặt bộ dò devtool), nên khi trang phát hỏng thì không còn đường nào
     //     biết vì sao. Gom vào đây rồi app đọc ra bằng evaluateJavascript.
