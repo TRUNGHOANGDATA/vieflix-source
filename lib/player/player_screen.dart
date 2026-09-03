@@ -1100,15 +1100,31 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         onHover: (_) => _onHover(),
         child: Stack(children: [
         Positioned.fill(child: _native ? _nativeVideo() : _webView()),
-        // PC: BẤM VÀO PHIM để tạm dừng/phát như trình phát thường. Lớp này nằm
-        // DƯỚI thanh điều khiển, bảng chọn nguồn và hộp báo lỗi (chúng ở SAU
-        // trong Stack nên được bấm trước — nút vẫn ăn), chỉ bắt cú bấm vào vùng
-        // phim. Chỉ bật trên desktop; TV dùng nút OK trên remote để tạm dừng.
-        if (!Platform.isAndroid)
+        // BẤM VÀO PHIM để tạm dừng/phát như trình phát thường. Lớp này nằm DƯỚI
+        // thanh điều khiển, bảng chọn nguồn và hộp báo lỗi (chúng ở SAU trong
+        // Stack nên được bấm trước — nút vẫn ăn), chỉ bắt cú bấm vào vùng phim.
+        //
+        // ⚠️ KHÔNG phủ suốt trên máy CẢM ỨNG khi đang xem qua TRANG NHÚNG: trang
+        // có nút bấm của riêng nó, mà iOS thì CHẶN tự phát (`play()` do script
+        // gọi bị từ chối, log ghi "AbortError: The operation was aborted") nên
+        // người xem BUỘC phải chạm tay vào nút Phát của trang. Lớp phủ nuốt mất
+        // cú chạm đó -> thấy nút Phát mà bấm không được, phim quay mãi.
+        if (_native ? !Platform.isAndroid : _dungChuot)
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: _togglePlay,
+            ),
+          )
+        // Máy cảm ứng + trang nhúng: chỉ chắn khi thanh điều khiển ĐANG ẨN, và
+        // chỉ để GỌI THANH RA — vì không có chuột để rê, không có bàn phím, nên
+        // đây là đường duy nhất lấy lại nút thoát/đổi tập. Thanh đang hiện thì
+        // thả cú chạm xuống cho trang, để bấm được nút Phát của nó.
+        else if (!_showBar)
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _bumpBar,
             ),
           ),
         // Logo góc kiểu kênh truyền hình: nằm im góc trên-phải suốt cả phim, mờ
@@ -1348,6 +1364,11 @@ JSON.stringify({
         .replace(/\s+/g,' ').slice(0, 140)
 })
 ''';
+
+  /// Máy dùng CHUỘT. Chỉ những máy này mới bấm-vào-phim-để-tạm-dừng được trên
+  /// trang nhúng; máy cảm ứng cần chạm thẳng vào nút của trang.
+  static final bool _dungChuot =
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   Widget _webView() {
     final nav = _navUrl;
