@@ -7,6 +7,7 @@ import '../data/update_checker.dart';
 import '../data/update_flow.dart';
 import '../data/sync_service.dart';
 import '../data/movie_source.dart';
+import '../data/ios_cert.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -19,10 +20,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _checking = false;
   bool _syncing = false;
 
+  /// Ngày hết hạn chữ ký (chỉ iPad cài qua Sideloadly/AltStore mới có).
+  DateTime? _hetHan;
+
   @override
   void initState() {
     super.initState();
     _ctrl = TextEditingController(text: ref.read(tmdbKeyProvider));
+    IosCert.expiry().then((d) {
+      if (mounted && d != null) setState(() => _hetHan = d);
+    });
   }
 
   @override
@@ -212,6 +219,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  /// Dòng hạn chữ ký. Chỉ hiện trên bản cài kiểu sideload — máy khác không có
+  /// hồ sơ ký nên [IosCert.expiry] trả null và dòng này không tồn tại.
+  Widget _chuKy(DateTime het) {
+    final con = IosCert.daysLeft(het);
+    final hai = het.day.toString().padLeft(2, '0');
+    final thang = het.month.toString().padLeft(2, '0');
+    final ngay = '$hai/$thang/${het.year}';
+
+    final (String chu, Color mau) = con < 0
+        ? ('Chữ ký đã hết hạn $ngay — cắm cáp ký lại để mở được app', kRed)
+        : con == 0
+            ? ('Chữ ký hết hạn HÔM NAY ($ngay) — ký lại ngay', kRed)
+            : con <= 2
+                ? ('Chữ ký hết hạn $ngay — còn $con ngày, nên ký lại sớm', kAmber)
+                : ('Chữ ký hết hạn $ngay — còn $con ngày', Colors.white70);
+
+    return Row(children: [
+      Icon(con <= 2 ? Icons.warning_amber_rounded : Icons.verified_user_outlined,
+          color: mau, size: 15),
+      const SizedBox(width: 6),
+      Expanded(
+        child: Text(chu,
+            style: TextStyle(
+                color: mau,
+                fontSize: 13,
+                fontWeight: con <= 2 ? FontWeight.bold : FontWeight.normal)),
+      ),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasKey = ref.watch(tmdbKeyProvider).isNotEmpty;
@@ -232,6 +269,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 2),
               Text('VieFlix v$kAppVersion', style: const TextStyle(color: Colors.white70)),
+              if (_hetHan != null) ...[
+                const SizedBox(height: 6),
+                _chuKy(_hetHan!),
+              ],
             ]),
           ),
           ElevatedButton.icon(
