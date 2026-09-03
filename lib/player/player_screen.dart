@@ -965,6 +965,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// Trước đây gặp cảnh này là màn hình đen câm, không biết hỏng gì cũng chẳng
   /// làm gì được. Nguồn khác thường vẫn phát bình thường nên lối thoát tốt nhất
   /// là mời đổi nguồn ngay tại đây.
+  /// Sau khi trang embed của nguonc tải xong, đợi nó chạy hết rồi ghi lại
+  /// trạng thái. Không có bước này thì lỗi trên iPad chỉ còn nước đoán, vì màn
+  /// hình chỉ hiện một câu chung chung của trang.
+  void _probeNguoncPage(InAppWebViewController c) {
+    if (!RefererGate.needsGate(_url)) return;
+    Future.delayed(const Duration(seconds: 7), () async {
+      if (!mounted) return;
+      try {
+        final r = await c.evaluateJavascript(source: _kNguoncProbeJs);
+        vlog('embed', 'trang thai trang nguonc: $r');
+      } catch (e) {
+        vlog('embed', 'khong doc duoc trang thai trang nguonc: $e');
+      }
+    });
+  }
+
   Widget _webErrorPanel() {
     final coNguonKhac = widget.sources.length > 1;
     return Positioned.fill(
@@ -1298,6 +1314,25 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
+  /// UA giả kiểu máy tính cho Windows/Android. Xem chú thích chỗ dùng.
+  static const _kDesktopUa =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+  /// Đọc các cờ mà CHÍNH trang embed của nguonc đặt ra, để biết nó tắc ở khâu
+  /// nào: chưa qua ải quảng cáo (popup), chọn sai luồng, hay phát lỗi.
+  static const _kNguoncProbeJs = r'''
+JSON.stringify({
+  ua: (navigator.userAgent||'').slice(0, 70),
+  plat: navigator.platform,
+  popupReady: window.popupReady, popupFailed: window.popupFailed,
+  started: window.playerStarted, blocked: window.playerBlocked,
+  stream: (window.streamURL||'').slice(0, 60),
+  video: !!document.querySelector('video'),
+  txt: ((document.getElementById('player')||{}).innerText||'')
+        .replace(/\s+/g,' ').slice(0, 140)
+})
+''';
+
   Widget _webView() {
     final nav = _navUrl;
     if (nav == null) {
@@ -1325,8 +1360,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
                 domStorageEnabled: true,
                 databaseEnabled: true,
-                userAgent:
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                // KHÔNG khai man trên iOS. Trang embed của nguonc TỰ CHIA NHÁNH
+                // theo máy Apple:
+                //   const isIOS = /iphone|ipod|ipad/i.test(navigator.userAgent) || ...
+                //   window.streamURL = '/' + sUb + (isApple ? '' : '?d=1');
+                // Đưa UA Windows vào iPad là ép nó đi nhánh sai -> trang tự báo
+                // "Đã xảy ra lỗi khi phát video". Trên Windows/Android thì UA giả
+                // vẫn cần, để trang trả giao diện máy tính thay vì bản rút gọn.
+                userAgent: Platform.isIOS ? null : _kDesktopUa,
               ),
               initialUserScripts: UnmodifiableListView([
                 UserScript(
@@ -1417,6 +1458,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 // gì để tiêm vào đó.
                 if (RefererGate.isGateUrl(url?.toString() ?? '')) return;
                 _pageLoadedOnce = true;
+                _probeNguoncPage(c);
                 if (_webError != null && mounted) {
                   setState(() => _webError = null); // tải lại được rồi
                 }
