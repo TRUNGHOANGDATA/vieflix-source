@@ -66,6 +66,13 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Cho phép lấy file nhật ký chẩn đoán (player-debug.log) ra khỏi iPad
+	     bằng app Files. Không có nó thì lỗi trên iOS chỉ còn nước đoán, vì
+	     iPad không cắm adb hay mở thư mục app như Windows/Android. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- Nguồn phim phát qua http và stream lẫn http/https; iOS chặn mặc định

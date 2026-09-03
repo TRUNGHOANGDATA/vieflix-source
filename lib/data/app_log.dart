@@ -9,6 +9,11 @@ import 'package:path_provider/path_provider.dart';
 ///   Windows: %APPDATA%\VieFlix\VieFlix\player-debug.log
 ///   Android: /data/data/com.vieflix.app_xem_phim/files/player-debug.log
 ///            (lấy nhanh bằng: adb pull hoặc tool/tv.ps1)
+///   iOS:     thư mục Documents của app -> HIỆN RA trong app Files, mục
+///            "Trên iPad tôi" > VieFlix. Phải là Documents chứ KHÔNG phải
+///            Application Support: `UIFileSharingEnabled` chỉ mở Documents,
+///            còn iPad thì không cắm adb hay mở %APPDATA% được như hai nền
+///            tảng kia, nên đây là đường DUY NHẤT lấy log ra.
 class DiagLog {
   static File? _file;
   static bool _init = false;
@@ -18,7 +23,9 @@ class DiagLog {
     if (_init) return;
     _init = true;
     try {
-      final dir = await getApplicationSupportDirectory();
+      final dir = Platform.isIOS
+          ? await getApplicationDocumentsDirectory()
+          : await getApplicationSupportDirectory();
       final f = File('${dir.path}${Platform.pathSeparator}player-debug.log');
       // Cắt bớt nếu file phình quá 512KB để khỏi đầy đĩa.
       if (await f.exists() && await f.length() > 512 * 1024) {

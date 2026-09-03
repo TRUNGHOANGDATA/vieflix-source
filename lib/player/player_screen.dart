@@ -175,6 +175,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// giá trị cũ để biết có phải đổi trang hay không, kể cả ở lần gọi đầu tiên.
   String _url = '';
 
+  /// Link mà WebView bắt đầu nạp gần nhất — dùng để biết cổng Referer có dẫn
+  /// được sang trang phim hay không.
+  String _lastNavStart = '';
+  Timer? _gateT;
+
   /// Link THẬT đưa cho WebView. Thường bằng [_url], nhưng với nguồn chặn
   /// hotlink thì là trang cổng nội bộ tự nhảy sang [_url] để trình duyệt sinh
   /// Referer (xem [RefererGate]). null = đang dựng cổng, chưa nạp được.
@@ -305,6 +310,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _pollT?.cancel();
     _closeNative();
     HlsPreparer.shutdown(); // tắt máy chủ playlist nội bộ khi rời trình phát
+    _gateT?.cancel();
     RefererGate.shutdown(); // và cả cổng Referer
     _nextT?.cancel();
     super.dispose();
@@ -866,12 +872,30 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
     final nav = await RefererGate.urlFor(url);
     if (!mounted || _url != url) return; // đã đổi tập/nguồn trong lúc chờ
+    vlog('embed', 'mo trang embed: $url' + (nav == url ? '' : ' (qua cong $nav)'));
     if (viaController && _c != null) {
       _navUrl = nav;
       await _c!.loadUrl(urlRequest: URLRequest(url: WebUri(nav)));
     } else {
       setState(() => _navUrl = nav);
     }
+    _armGateWatchdog(url, nav);
+  }
+
+  /// Lưới an toàn cho cổng Referer: nếu sau vài giây WebView vẫn còn nằm ở
+  /// trang cổng (chưa nhảy được sang trang phim) thì nạp thẳng link gốc như
+  /// cách cũ. Thà dính lại lỗi chặn hotlink còn hơn treo ở trang trắng — và
+  /// dòng nhật ký ở đây cho biết nền tảng nào đi được đường nào.
+  void _armGateWatchdog(String target, String nav) {
+    _gateT?.cancel();
+    if (nav == target) return; // không qua cổng thì không phải canh
+    _gateT = Timer(const Duration(seconds: 8), () {
+      if (!mounted || _url != target) return;
+      if (!RefererGate.isGateUrl(_lastNavStart)) return; // đã sang trang phim
+      vlog('embed', 'cong khong dan sang trang phim sau 8s -> nap thang $target');
+      _navUrl = target;
+      _c?.loadUrl(urlRequest: URLRequest(url: WebUri(target)));
+    });
   }
 
   /// Nạp một tập: ưu tiên link m3u8 (player native), không có thì trang embed.
@@ -1328,6 +1352,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               onWebViewCreated: (c) {
                 _c = c;
                 vlog('webview', 'da tao WebView');
+              },
+              onLoadStart: (c, url) {
+                _lastNavStart = url?.toString() ?? '';
+                vlog('webview', 'bat dau tai $_lastNavStart');
               },
               onReceivedError: (c, req, err) {
                 vlog('webview', 'LOI TAI TRANG ${req.url}: ${err.type} ${err.description}');
