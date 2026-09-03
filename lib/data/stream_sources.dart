@@ -27,7 +27,12 @@ List<StreamSource> streamSourcesOf(MovieDetail d) {
 /// Giữ thói quen cũ là ưu tiên tiếng Việt (Thuyết minh / Lồng tiếng); trong
 /// cùng loại tiếng thì ưu tiên bản có link phát thẳng (m3u8) vì phát bằng trình
 /// phát của app, không phải trang embed.
-int defaultSourceIndex(List<StreamSource> servers) {
+/// [embedPlayable] = false khi nền tảng KHÔNG phát được trang embed (iOS: trang
+/// của streamc.xyz chạy tới nơi rồi tự báo "Đã xảy ra lỗi khi phát video", đo
+/// trên iPad 03/09/2026 — qua được ải quảng cáo, player.js chạy, nhưng không
+/// tạo nổi thẻ video). Lúc đó bản embed vẫn CÒN trong danh sách để người dùng
+/// tự chọn, chỉ không được chọn SẴN — thà mở ra xem được ngay còn hơn mở ra lỗi.
+int defaultSourceIndex(List<StreamSource> servers, {bool embedPlayable = true}) {
   // Hai tầng ưu tiên:
   //   1) LOẠI TIẾNG (quan trọng nhất): Thuyết minh > Lồng tiếng > còn lại.
   //   2) Trong CÙNG loại tiếng: bản phát thẳng (hls, vd phimapi) trước bản nhúng
@@ -38,12 +43,22 @@ int defaultSourceIndex(List<StreamSource> servers) {
     if (lang == 'Lồng tiếng') return 1;
     return 2;
   }
-  int best = 0, bestLang = 99, bestKind = 99;
+  // Tầng 0 (trên cả loại tiếng): bản PHÁT ĐƯỢC. Ưu tiên Thuyết minh chỉ có
+  // nghĩa khi bản đó xem được; một bản Thuyết minh mở ra chỉ thấy báo lỗi thì
+  // không hơn gì bản Vietsub xem được.
+  int playRank(StreamSource s) =>
+      (embedPlayable || s.kind == StreamKind.hls) ? 0 : 1;
+
+  int best = 0, bestPlay = 99, bestLang = 99, bestKind = 99;
   for (int i = 0; i < servers.length; i++) {
+    final pr = playRank(servers[i]);
     final lr = langRank(servers[i].lang);
     final kr = servers[i].kind == StreamKind.hls ? 0 : 1;
-    if (lr < bestLang || (lr == bestLang && kr < bestKind)) {
+    if (pr < bestPlay ||
+        (pr == bestPlay &&
+            (lr < bestLang || (lr == bestLang && kr < bestKind)))) {
       best = i;
+      bestPlay = pr;
       bestLang = lr;
       bestKind = kr;
     }

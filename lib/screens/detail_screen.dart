@@ -55,7 +55,8 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
   int _effServer(List<StreamSource> servers) {
     final u = _userServer;
     if (u != null && u >= 0 && u < servers.length) return u;
-    return defaultSourceIndex(servers);
+    // iOS: trang embed của nguonc không phát được (xem chú thích trong hàm).
+    return defaultSourceIndex(servers, embedPlayable: !Platform.isIOS);
   }
 
   // Tên tập hiển thị: KKPhim đã có sẵn "Tập 01", nguonc chỉ có "1" -> tránh "Tập Tập"

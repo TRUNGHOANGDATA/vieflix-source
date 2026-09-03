@@ -1328,6 +1328,15 @@ JSON.stringify({
   started: window.playerStarted, blocked: window.playerBlocked,
   stream: (window.streamURL||'').slice(0, 60),
   video: !!document.querySelector('video'),
+  // Năng lực của WebView — trang phát HLS mã hoá cần một trong số này.
+  mse: typeof MediaSource !== 'undefined',
+  mms: typeof ManagedMediaSource !== 'undefined',
+  sw: !!navigator.serviceWorker,
+  wasm: typeof WebAssembly !== 'undefined',
+  subtle: !!(window.crypto && window.crypto.subtle),
+  hlsNative: !!document.createElement('video')
+        .canPlayType('application/vnd.apple.mpegurl'),
+  errs: (window.__vfErrors||[]).slice(0, 3),
   txt: ((document.getElementById('player')||{}).innerText||'')
         .replace(/\s+/g,' ').slice(0, 140)
 })

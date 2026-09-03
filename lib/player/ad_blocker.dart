@@ -209,6 +209,29 @@ const String kAutoPlayScript = r'''
 const String kAntiAdUserScript = r'''
 (function () {
   try {
+    // -1) GOM LỖI JS của trang. Console của trang bị bịt ở phần dưới (để qua
+    //     mặt bộ dò devtool), nên khi trang phát hỏng thì không còn đường nào
+    //     biết vì sao. Gom vào đây rồi app đọc ra bằng evaluateJavascript.
+    try {
+      if (!window.__vfErrors) {
+        window.__vfErrors = [];
+        var push = function (s) {
+          try {
+            if (window.__vfErrors.length < 8) window.__vfErrors.push(String(s).slice(0, 160));
+          } catch (e) {}
+        };
+        window.addEventListener('error', function (e) {
+          push((e && e.message ? e.message : 'error') + ' @' +
+               ((e && e.filename ? e.filename : '').split('/').pop()) + ':' + (e && e.lineno));
+        }, true);
+        window.addEventListener('unhandledrejection', function (e) {
+          push('reject: ' + (e && e.reason ? e.reason : ''));
+        });
+        var ce = console.error;
+        console.error = function () { push(Array.prototype.join.call(arguments, ' ')); };
+        void ce;
+      }
+    } catch (e) {}
     // 0) VÔ HIỆU "disable-devtool" (devtool-guard.bundle.js của streamc.xyz).
     //    Log thật cho thấy nó bắn 'You don't have permission to use DEVTOOL type=6'
     //    rồi HUỶ/TẢI LẠI trang liên tục -> player không bao giờ dựng được.
