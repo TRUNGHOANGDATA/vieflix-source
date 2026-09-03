@@ -8,6 +8,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:media_kit/media_kit.dart';
 import '../data/hls_source.dart';
 import '../data/referer_gate.dart';
+import '../data/movie_source.dart' show sourceOfSlug, kSrcNguonc;
 import '../data/app_log.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -977,15 +978,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// hình chỉ hiện một câu chung chung của trang.
   void _probeNguoncPage(InAppWebViewController c) {
     if (!RefererGate.needsGate(_url)) return;
-    Future.delayed(const Duration(seconds: 7), () async {
-      if (!mounted) return;
-      try {
-        final r = await c.evaluateJavascript(source: _kNguoncProbeJs);
-        vlog('embed', 'trang thai trang nguonc: $r');
-      } catch (e) {
-        vlog('embed', 'khong doc duoc trang thai trang nguonc: $e');
-      }
-    });
+    // Đo HAI nhịp: 7 giây để bắt lúc trang vừa dựng xong, 20 giây để bắt lỗi
+    // player báo muộn (jwplayer thường mất một lúc mới kết luận là hỏng).
+    for (final giay in [7, 20]) {
+      Future.delayed(Duration(seconds: giay), () async {
+        if (!mounted) return;
+        try {
+          final r = await c.evaluateJavascript(source: _kNguoncProbeJs);
+          vlog('embed', 'trang nguonc sau ${giay}s: $r');
+        } catch (e) {
+          vlog('embed', 'khong doc duoc trang nguonc sau ${giay}s: $e');
+        }
+      });
+    }
   }
 
   Widget _webErrorPanel() {
@@ -1264,6 +1269,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               ),
               const SizedBox(width: 4),
             ],
+            if (_hienNutSafari) ...[
+              TextButton.icon(
+                onPressed: _moSafari,
+                icon: const Icon(Icons.open_in_browser, color: kAmber, size: 20),
+                label: const Text('Mở Safari',
+                    style: TextStyle(color: kAmber, fontSize: 13)),
+              ),
+              const SizedBox(width: 4),
+            ],
             // NÚT tạm dừng/phát chứ không phải icon trang trí: thanh của nguồn
             // đã bị giấu nên đây là nút pause duy nhất cho người dùng chuột.
             // Icon theo HÀNH ĐỘNG sắp làm (đang dừng -> hiện ▶ để phát).
@@ -1344,26 +1358,82 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// Đọc các cờ mà CHÍNH trang embed của nguonc đặt ra, để biết nó tắc ở khâu
   /// nào: chưa qua ải quảng cáo (popup), chọn sai luồng, hay phát lỗi.
   static const _kNguoncProbeJs = r'''
-JSON.stringify({
-  ua: (navigator.userAgent||'').slice(0, 70),
-  plat: navigator.platform,
-  popupReady: window.popupReady, popupFailed: window.popupFailed,
-  started: window.playerStarted, blocked: window.playerBlocked,
-  stream: (window.streamURL||'').slice(0, 60),
-  video: !!document.querySelector('video'),
-  // Năng lực của WebView — trang phát HLS mã hoá cần một trong số này.
-  mse: typeof MediaSource !== 'undefined',
-  mms: typeof ManagedMediaSource !== 'undefined',
-  sw: !!navigator.serviceWorker,
-  wasm: typeof WebAssembly !== 'undefined',
-  subtle: !!(window.crypto && window.crypto.subtle),
-  hlsNative: !!document.createElement('video')
-        .canPlayType('application/vnd.apple.mpegurl'),
-  errs: (window.__vfErrors||[]).slice(0, 3),
-  txt: ((document.getElementById('player')||{}).innerText||'')
-        .replace(/\s+/g,' ').slice(0, 140)
-})
+(function () {
+  function cut(x, n) { return (x == null ? '' : String(x)).slice(0, n); }
+  var v = document.querySelector('video');
+  var jw = null, jwState = 'nojw';
+  try { if (typeof window.jwplayer === 'function') { jw = window.jwplayer(); jwState = jw.getState(); } }
+  catch (e) { jwState = 'jwerr'; }
+  var canPlay = {};
+  try {
+    var MS = window.MediaSource || window.ManagedMediaSource;
+    ['video/mp4;codecs="avc1.42E01E"', 'video/mp4;codecs="avc1.64001f"',
+     'video/mp4;codecs="hvc1.1.6.L93.B0"', 'audio/mp4;codecs="mp4a.40.2"']
+      .forEach(function (t) {
+        canPlay[t.replace(/^\w+\/mp4;codecs="|"$/g, '')] =
+          (MS && MS.isTypeSupported) ? MS.isTypeSupported(t) : null;
+      });
+  } catch (e) {}
+  return JSON.stringify({
+    // --- nhận dạng máy: đã lừa được trang chưa ---
+    ua: cut(navigator.userAgent, 46),
+    plat: navigator.platform,
+    touch: navigator.maxTouchPoints,
+    // --- trang chọn luồng nào: PHẢI thấy được có '?d=1' hay không ---
+    stream: cut(window.streamURL, 999),
+    popupReady: window.popupReady, started: window.playerStarted,
+    blocked: window.playerBlocked,
+    // --- thẻ video nói gì ---
+    video: !!v,
+    vErr: v && v.error ? (v.error.code + ':' + cut(v.error.message, 60)) : null,
+    vNet: v ? v.networkState : null,   // 3 = NO_SOURCE
+    vReady: v ? v.readyState : null,   // 0 = chưa có metadata
+    vDur: v ? v.duration : null,
+    vSrc: v ? cut(v.currentSrc, 70) : null,
+    // --- player nói gì ---
+    jwState: jwState,
+    jwErr: cut(window.__vfJwErr, 150),
+    // --- WebView giải được codec gì ---
+    codec: canPlay,
+    // --- tài nguyên nào tải hỏng ---
+    errs: (window.__vfErrors || []).slice(0, 5)
+  });
+})()
 ''';
+
+  /// iPad có nên hiện nút "Mở Safari" không.
+  ///
+  /// Trang phát của nguonc chạy được trong **Safari thật** nhưng không chạy
+  /// trong WebView nhúng của app (đã thử trên máy: Safari xem được, app quay
+  /// mãi). Safari có ServiceWorker, WKWebView thì không bao giờ có. Nên cho
+  /// người xem một đường thoát thay vì ngồi nhìn vòng quay.
+  bool get _hienNutSafari {
+    if (!Platform.isIOS || _native) return false;
+    if (_srcIdx < 0 || _srcIdx >= widget.sources.length) return false;
+    return sourceOfSlug(widget.sources[_srcIdx].movieSlug) == kSrcNguonc;
+  }
+
+  /// Mở TRANG PHIM của nguonc trong Safari (dạng cửa sổ nằm trong app, bấm
+  /// Xong là về lại đây).
+  ///
+  /// Mở trang phim chứ KHÔNG mở thẳng link embed: link embed đòi Referer hợp
+  /// lệ, gọi trực tiếp sẽ ăn 403 của Cloudflare. Vào trang phim thì iframe
+  /// embed nằm trong đó nên Referer hợp lệ, y như người ta xem trên web.
+  Future<void> _moSafari() async {
+    final slug = widget.sources[_srcIdx].movieSlug;
+    final url = 'https://phim.nguonc.com/phim/$slug';
+    vlog('embed', 'mo bang Safari: $url');
+    try {
+      await ChromeSafariBrowser().open(url: WebUri(url));
+    } catch (e) {
+      vlog('embed', 'khong mo duoc Safari: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: kRed,
+        content: Text('Không mở được Safari: $e'),
+      ));
+    }
+  }
 
   /// Máy dùng CHUỘT. Chỉ những máy này mới bấm-vào-phim-để-tạm-dừng được trên
   /// trang nhúng; máy cảm ứng cần chạm thẳng vào nút của trang.

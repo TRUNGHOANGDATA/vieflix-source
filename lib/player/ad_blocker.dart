@@ -239,9 +239,44 @@ const String kAntiAdUserScript = r'''
           } catch (e) {}
         };
         window.addEventListener('error', function (e) {
+          // Lỗi TẢI TÀI NGUYÊN (script/ảnh/video hỏng) không có message — nó nằm
+          // ở e.target. Trước đây chỉ ghi được "error @:undefined", vô dụng.
+          try {
+            var t = e && e.target;
+            if (t && t !== window && t.tagName) {
+              push('tai hong <' + t.tagName.toLowerCase() + '> ' +
+                   String(t.currentSrc || t.src || t.href || '').slice(-70));
+              return;
+            }
+          } catch (e2) {}
           push((e && e.message ? e.message : 'error') + ' @' +
                ((e && e.filename ? e.filename : '').split('/').pop()) + ':' + (e && e.lineno));
         }, true);
+
+        // Lỗi do CHÍNH jwplayer báo — nó có mã lỗi rất cụ thể (vd 232011 =
+        // không tải được playlist, 224003 = định dạng không phát được). Player
+        // xuất hiện muộn nên phải chờ; thôi chờ sau ~24 giây.
+        var tries = 0;
+        var jwT = setInterval(function () {
+          if (++tries > 80) { clearInterval(jwT); return; }
+          try {
+            if (typeof window.jwplayer !== 'function') return;
+            var jp = window.jwplayer();
+            if (!jp || !jp.on) return;
+            clearInterval(jwT);
+            var note = function (kind) {
+              return function (ev) {
+                try {
+                  window.__vfJwErr = kind + ' ' + (ev && ev.code ? ev.code : '') +
+                    ' ' + String((ev && (ev.message || ev.type)) || '').slice(0, 90);
+                } catch (e) {}
+              };
+            };
+            jp.on('error', note('error'));
+            jp.on('setupError', note('setupError'));
+            if (jp.on) { try { jp.on('warning', note('warning')); } catch (e) {} }
+          } catch (e) {}
+        }, 300);
         window.addEventListener('unhandledrejection', function (e) {
           push('reject: ' + (e && e.reason ? e.reason : ''));
         });
