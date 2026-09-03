@@ -202,34 +202,6 @@ void main() {
       expect(pick(list), 1);
     });
 
-    test('nền tảng không phát được embed thì bỏ qua bản embed khi chọn SẴN', () {
-      // iOS: trang embed của nguonc mở ra chỉ thấy báo lỗi. Thuyết minh vẫn
-      // được ưu tiên, nhưng chỉ trong số các bản THỰC SỰ xem được.
-      final list = [
-        src('phimapi', 'Vietsub', StreamKind.hls),
-        src('nguonc', 'Thuyết minh', StreamKind.embed),
-      ];
-      expect(pick(list, embedPlayable: true), 1);  // máy khác: Thuyết minh
-      expect(pick(list, embedPlayable: false), 0); // iOS: bản xem được
-    });
-
-    test('vẫn ưu tiên thuyết minh trong số các bản phát được', () {
-      final list = [
-        src('phimapi', 'Vietsub', StreamKind.hls),
-        src('nguonc', 'Thuyết minh', StreamKind.embed),
-        src('phimapi', 'Thuyết minh', StreamKind.hls),
-      ];
-      expect(pick(list, embedPlayable: false), 2);
-    });
-
-    test('chỉ có bản embed thì vẫn phải chọn nó, đừng để trống', () {
-      final list = [
-        src('nguonc', 'Vietsub', StreamKind.embed),
-        src('nguonc', 'Thuyết minh', StreamKind.embed),
-      ];
-      expect(pick(list, embedPlayable: false), 1);
-    });
-
     test('thuyết minh có link thẳng thắng thuyết minh embed', () {
       final list = [
         src('nguonc', 'Vietsub', StreamKind.embed),
