@@ -32,6 +32,24 @@ final apiProvider = Provider<MovieSource>((ref) {
   );
 });
 
+/// Bỏ phim của các nguồn ĐANG TẮT khỏi một danh sách đã lưu.
+///
+/// Tắt một nguồn thì nó phải biến mất khỏi MỌI chỗ, không riêng danh mục. Trước
+/// đây "Yêu thích" và "Đang xem" đọc thẳng từ máy nên tắt nguonc trên iPad rồi
+/// phim nguonc vẫn nằm ở Trang chủ, bấm vào lại không phát được.
+///
+/// Chỉ ẨN chứ KHÔNG xoá: bật nguồn lại là thấy lại nguyên vẹn.
+///
+/// Là HÀM chứ không phải Provider: Provider nhớ kết quả, mà hai danh sách này
+/// nằm trong [LocalStore] (không phải state của Riverpod) nên thêm/xoá xong sẽ
+/// không vẽ lại. Hàm thì tính lại mỗi lần dựng giao diện, đúng như cũ.
+Iterable<T> onlyEnabledSources<T>(
+  Iterable<T> items,
+  Set<String> enabled,
+  String Function(T) slugOf,
+) =>
+    items.where((e) => enabled.contains(sourceOfSlug(slugOf(e))));
+
 /// Tăng giá trị này để buộc Trang chủ vẽ lại (sau khi xoá mục Xem tiếp...).
 final homeRefreshProvider = StateProvider<int>((ref) => 0);
 

@@ -16,7 +16,9 @@ class _MyListScreenState extends ConsumerState<MyListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final favs = ref.watch(storeProvider).favorites;
+    final favs = onlyEnabledSources(ref.watch(storeProvider).favorites,
+            ref.watch(enabledSourcesProvider), (m) => m.slug)
+        .toList();
     if (favs.isEmpty) {
       return const Center(
         child: Text('Chưa có phim yêu thích.\nBấm ♥ ở trang chi tiết để lưu.',

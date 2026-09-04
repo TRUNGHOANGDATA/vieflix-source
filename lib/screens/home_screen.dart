@@ -216,7 +216,9 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _continueRow(WidgetRef ref, BuildContext context) {
-    final cw = ref.watch(storeProvider).continueWatching;
+    final cw = onlyEnabledSources(ref.watch(storeProvider).continueWatching,
+            ref.watch(enabledSourcesProvider), (p) => p.slug)
+        .toList();
     if (cw.isEmpty) return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Padding(

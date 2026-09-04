@@ -11,7 +11,9 @@ class WatchingScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(homeRefreshProvider); // vẽ lại khi xem thêm / xoá mục
-    final cw = ref.watch(storeProvider).continueWatching;
+    final cw = onlyEnabledSources(ref.watch(storeProvider).continueWatching,
+            ref.watch(enabledSourcesProvider), (p) => p.slug)
+        .toList();
     if (cw.isEmpty) {
       return const Center(
         child: Text('Chưa có phim đang xem dở.\nVào xem một phim, nó sẽ hiện ở đây.',
