@@ -19,7 +19,7 @@ const PROBE = `(function(){
     jwErr:window.__vfJwErr||'', mse:window.__vfMse||null, req:window.__vfReq||null,
     net:(window.__vfNet||[]).slice(0,6), errs:(window.__vfErrors||[]).slice(0,6),
     W: window.__vfW, xhr: window.__vfXhr, MS: window.__vfMS, test: window.__vfTest, its: window.__vfITS, Hls: typeof window.Hls,
-    SB: window.__vfSB, nat: window.__vfNat});
+    SB: window.__vfSB, nat: window.__vfNat, who: window.__vfWho});
 })()`;
 
 setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); }, 110000);
@@ -72,6 +72,21 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
         return oAppend.apply(this, arguments);
       };
     }
+    // AI gỡ SourceBuffer? Ghi stack của removeSourceBuffer/abort/endOfStream, và
+    // đếm sự kiện 'emptied'/'loadstart' trên video kèm media.src lúc đó.
+    window.__vfWho = [];
+    const who = (tag) => { try { const st = (new Error().stack || '').split('
+').slice(1, 7).map(l => l.trim().replace(/^at /, '').replace(/https?:\/\/[^/]+\//g, '').slice(0, 70)).join(' < '); const v = document.querySelector('video'); if (window.__vfWho.length < 12) window.__vfWho.push(tag + ' | src=' + (v ? String(v.src).slice(0, 25) : '-') + ' | ' + st); } catch (e) {} };
+    const MSP = (window.ManagedMediaSource || window.MediaSource || {}).prototype;
+    for (const P of [window.MediaSource && window.MediaSource.prototype, window.ManagedMediaSource && window.ManagedMediaSource.prototype]) {
+      if (!P || P.__vfHooked) continue; P.__vfHooked = 1;
+      for (const fn of ['removeSourceBuffer', 'endOfStream']) { const o = P[fn]; if (o) P[fn] = function () { who(fn); return o.apply(this, arguments); }; }
+    }
+    if (SBp && SBp.abort) { const oa = SBp.abort; SBp.abort = function () { who('SB.abort'); return oa.apply(this, arguments); }; }
+    const oLoad = HTMLMediaElement.prototype.load;
+    HTMLMediaElement.prototype.load = function () { who('media.load()'); return oLoad.apply(this, arguments); };
+    document.addEventListener('emptied', (e) => { if (e.target && e.target.tagName === 'VIDEO') who('EVENT emptied'); }, true);
+    document.addEventListener('loadstart', (e) => { if (e.target && e.target.tagName === 'VIDEO') who('EVENT loadstart'); }, true);
     // Giữ lại Blob playlist đã giải mã để thử phát native.
     const oc = URL.createObjectURL;
     URL.createObjectURL = function (o) {
