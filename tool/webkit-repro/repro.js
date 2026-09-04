@@ -18,7 +18,8 @@ const PROBE = `(function(){
     vTime:v?v.currentTime:null, vSrc:v?String(v.currentSrc).slice(0,30):null, jw:st,
     jwErr:window.__vfJwErr||'', mse:window.__vfMse||null, req:window.__vfReq||null,
     net:(window.__vfNet||[]).slice(0,6), errs:(window.__vfErrors||[]).slice(0,6),
-    W: window.__vfW, xhr: window.__vfXhr, MS: window.__vfMS, test: window.__vfTest, its: window.__vfITS, Hls: typeof window.Hls});
+    W: window.__vfW, xhr: window.__vfXhr, MS: window.__vfMS, test: window.__vfTest, its: window.__vfITS, Hls: typeof window.Hls,
+    SB: window.__vfSB, nat: window.__vfNat});
 })()`;
 
 setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); }, 110000);
@@ -52,8 +53,29 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
       const of = O.isTypeSupported.bind(O);
       O.isTypeSupported = function (m) { const r = of(m); if (window.__vfITS.length < 16) window.__vfITS.push(k.replace('ManagedMediaSource', 'MMS').replace('MediaSource', 'MS') + ' ' + m + ' => ' + r); return r; };
     }
+    // Soi SourceBuffer: nạp gì (tên box), rồi WebKit trả lời gì (updateend/error/buffered).
+    window.__vfSB = [];
+    const boxes = (u8) => { try { const names = []; let i = 0; const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+      while (i + 8 <= u8.byteLength && names.length < 8) { let sz = dv.getUint32(i); const ty = String.fromCharCode(u8[i+4], u8[i+5], u8[i+6], u8[i+7]); if (sz === 1) { sz = Number(dv.getBigUint64(i + 8)); } if (sz < 8) { names.push(ty + '?'); break; } names.push(ty + ':' + sz); i += sz; }
+      return names.join(' '); } catch (e) { return 'boxes? ' + e; } };
+    const SBp = window.SourceBuffer && window.SourceBuffer.prototype;
+    if (SBp) {
+      const oAppend = SBp.appendBuffer;
+      SBp.appendBuffer = function (b) {
+        let rec = this.__vfRec; if (!rec) { rec = this.__vfRec = { n: window.__vfSB.length, appends: 0, updateend: 0, errors: [], boxes: [], buffered: '', tso: this.timestampOffset }; window.__vfSB.push(rec);
+          this.addEventListener('updateend', () => { rec.updateend++; try { const r = []; for (let k = 0; k < this.buffered.length; k++) r.push(this.buffered.start(k).toFixed(2) + '-' + this.buffered.end(k).toFixed(2)); rec.buffered = r.join(',') || '(rong)'; } catch (e) { rec.buffered = 'err ' + e; } });
+          this.addEventListener('error', (e) => { const v = document.querySelector('video'); rec.errors.push('SB error; video.error=' + (v && v.error ? v.error.code + ':' + v.error.message : 'null')); });
+          this.addEventListener('abort', () => { rec.errors.push('SB abort'); }); }
+        rec.appends++;
+        try { const u8 = b instanceof ArrayBuffer ? new Uint8Array(b) : new Uint8Array(b.buffer, b.byteOffset, b.byteLength); if (rec.boxes.length < 6) rec.boxes.push(u8.byteLength + 'B[' + boxes(u8) + ']'); } catch (e) { rec.boxes.push('?' + e); }
+        rec.tso = this.timestampOffset;
+        return oAppend.apply(this, arguments);
+      };
+    }
+    // Giữ lại Blob playlist đã giải mã để thử phát native.
     const oc = URL.createObjectURL;
     URL.createObjectURL = function (o) {
+      if (o && o.type && /mpegurl/i.test(o.type)) { window.__vfM3u8BlobObj = o; }
       if (o && (o instanceof MediaSource || (window.ManagedMediaSource && o instanceof window.ManagedMediaSource))) {
         window.__vfMS.attach++;
         setTimeout(() => { const v = document.querySelector('video'); window.__vfMS.drp = v ? { disableRemotePlayback: v.disableRemotePlayback, inDom: v.isConnected, muted: v.muted, autoplay: v.autoplay, playsinline: v.hasAttribute('playsinline') } : null; }, 1500);
@@ -133,5 +155,5 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
     try { await page.evaluate(auto); } catch (e) {}
     try { log(`  t=${(i + 1) * 2.5}s ${await page.evaluate(PROBE)}`); } catch (e) { log('  probe loi ' + e); }
   }
-  await browser.close();
+  browser.close().catch(() => {}); setTimeout(() => process.exit(0), 1500);
 })().catch(e => { console.error('LOI:', e); process.exit(1); });
