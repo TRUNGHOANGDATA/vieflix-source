@@ -75,8 +75,7 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
     // AI gỡ SourceBuffer? Ghi stack của removeSourceBuffer/abort/endOfStream, và
     // đếm sự kiện 'emptied'/'loadstart' trên video kèm media.src lúc đó.
     window.__vfWho = [];
-    const who = (tag) => { try { const st = (new Error().stack || '').split('
-').slice(1, 7).map(l => l.trim().replace(/^at /, '').replace(/https?:\/\/[^/]+\//g, '').slice(0, 70)).join(' < '); const v = document.querySelector('video'); if (window.__vfWho.length < 12) window.__vfWho.push(tag + ' | src=' + (v ? String(v.src).slice(0, 25) : '-') + ' | ' + st); } catch (e) {} };
+    const who = (tag) => { try { const st = (new Error().stack || '').split(String.fromCharCode(10)).slice(1, 7).map(l => l.trim().replace(/^at /, '').replace(new RegExp('https?://[^/]+/','g'), '').slice(0, 70)).join(' < '); const v = document.querySelector('video'); if (window.__vfWho.length < 12) window.__vfWho.push(tag + ' | src=' + (v ? String(v.src).slice(0, 25) : '-') + ' | ' + st); } catch (e) {} };
     const MSP = (window.ManagedMediaSource || window.MediaSource || {}).prototype;
     for (const P of [window.MediaSource && window.MediaSource.prototype, window.ManagedMediaSource && window.ManagedMediaSource.prototype]) {
       if (!P || P.__vfHooked) continue; P.__vfHooked = 1;
