@@ -18,10 +18,10 @@ const PROBE = `(function(){
     vTime:v?v.currentTime:null, vSrc:v?String(v.currentSrc).slice(0,30):null, jw:st,
     jwErr:window.__vfJwErr||'', mse:window.__vfMse||null, req:window.__vfReq||null,
     net:(window.__vfNet||[]).slice(0,6), errs:(window.__vfErrors||[]).slice(0,6),
-    W: window.__vfW, xhr: window.__vfXhr, MS: window.__vfMS, test: window.__vfTest});
+    W: window.__vfW, xhr: window.__vfXhr, MS: window.__vfMS, test: window.__vfTest, its: window.__vfITS, Hls: typeof window.Hls});
 })()`;
 
-setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); }, 70000);
+setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); }, 110000);
 (async () => {
   const browser = await (engine === 'webkit' ? webkit : chromium).launch({ headless: true });
   const ctx = await browser.newContext({ userAgent: UA, viewport: { width: 1280, height: 720 } });
@@ -41,6 +41,12 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
       P.prototype = O.prototype; P.isTypeSupported = O.isTypeSupported && O.isTypeSupported.bind(O);
       window[k] = P;
     }
+    window.__vfITS = [];
+    for (const k of ['MediaSource', 'ManagedMediaSource']) {
+      const O = window[k]; if (!O || !O.isTypeSupported) continue;
+      const of = O.isTypeSupported.bind(O);
+      O.isTypeSupported = function (m) { const r = of(m); if (window.__vfITS.length < 16) window.__vfITS.push(k.replace('ManagedMediaSource', 'MMS').replace('MediaSource', 'MS') + ' ' + m + ' => ' + r); return r; };
+    }
     const oc = URL.createObjectURL;
     URL.createObjectURL = function (o) {
       if (o && (o instanceof MediaSource || (window.ManagedMediaSource && o instanceof window.ManagedMediaSource))) {
@@ -58,6 +64,7 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
       window.__vfW.msgIn = []; window.__vfW.msgOut = [];
       const tag = (d) => { try { if (!d || typeof d !== 'object') return String(d).slice(0, 30);
         const k = d.cmd || d.event || d.type || Object.keys(d).slice(0, 3).join('|');
+        if (k === 'workerLog' && d.data) return ('log:' + String(d.data.message || d.data.msg || JSON.stringify(d.data))).slice(0, 110);
         let extra = '';
         if (d.data && d.data.details) extra = ':' + d.data.details; else if (d.data && d.data.type) extra = ':' + d.data.type;
         if (d.data && d.data.reason) extra += ':' + String(d.data.reason).slice(0, 60);
