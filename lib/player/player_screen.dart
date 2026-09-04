@@ -1399,8 +1399,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     vBuf: (v && v.buffered) ? v.buffered.length : null,
     // --- tài nguyên nào tải hỏng ---
     errs: (window.__vfErrors || []).slice(0, 5),
-    // --- REQUEST nào hỏng: thứ duy nhất trả lời "vì sao dữ liệu không về" ---
-    net: (window.__vfNet || []).slice(0, 8)
+    // --- REQUEST nào hỏng ---
+    net: (window.__vfNet || []).slice(0, 8),
+    // --- player có ĐI LẤY dữ liệu không, và có NẠP được vào không ---
+    req: window.__vfReq || null,
+    mse: window.__vfMse || null
   });
 })()
 ''';

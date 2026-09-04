@@ -252,6 +252,7 @@ const String kAntiAdUserScript = r'''
         if (of) {
           window.fetch = function (input, init) {
             var u = (input && input.url) ? input.url : input;
+            try { window.__vfReq.n++; window.__vfReq.cuoi = String(u).slice(-60); } catch (e2) {}
             var pr;
             try { pr = of.apply(this, arguments); } catch (e) { note('fetch', u, 'nem:' + e); throw e; }
             return pr.then(function (r) {
@@ -266,6 +267,7 @@ const String kAntiAdUserScript = r'''
           OX.prototype.open = function (m, u) { this.__vfUrl = u; return op.apply(this, arguments); };
           OX.prototype.send = function () {
             var self = this;
+            try { window.__vfReq.n++; window.__vfReq.cuoi = String(self.__vfUrl).slice(-60); } catch (e2) {}
             self.addEventListener('error', function () { note('xhr', self.__vfUrl, 'hong'); });
             self.addEventListener('abort', function () { note('xhr', self.__vfUrl, 'bi huy'); });
             self.addEventListener('load', function () {
@@ -275,6 +277,36 @@ const String kAntiAdUserScript = r'''
           };
         }
       }
+    } catch (e) {}
+
+    // -1c) THEO DÕI CHỖ NẠP DỮ LIỆU VÀO TRÌNH PHÁT. Đo trên iPad cho thấy
+    //      MediaSource đã gắn (currentSrc là blob:) nhưng buffered.length = 0 và
+    //      KHÔNG request nào hỏng — tức là hoặc player chưa từng gọi nạp, hoặc
+    //      gọi rồi bị ném lỗi. Đây là chỗ duy nhất phân định được hai khả năng.
+    try {
+      window.__vfMse = { addSB: 0, mime: '', append: 0, loi: '' };
+      var MSp = window.MediaSource && window.MediaSource.prototype;
+      if (MSp && MSp.addSourceBuffer) {
+        var oAdd = MSp.addSourceBuffer;
+        MSp.addSourceBuffer = function (mime) {
+          window.__vfMse.addSB++;
+          window.__vfMse.mime = String(mime).slice(0, 60);
+          try { return oAdd.apply(this, arguments); }
+          catch (e) { window.__vfMse.loi = 'addSourceBuffer: ' + e; throw e; }
+        };
+      }
+      var SBp = window.SourceBuffer && window.SourceBuffer.prototype;
+      if (SBp && SBp.appendBuffer) {
+        var oApp = SBp.appendBuffer;
+        SBp.appendBuffer = function (b) {
+          window.__vfMse.append++;
+          try { return oApp.apply(this, arguments); }
+          catch (e) { window.__vfMse.loi = 'appendBuffer: ' + e; throw e; }
+        };
+      }
+      // Đếm TỔNG số request (không chỉ request hỏng) để biết player có đi lấy
+      // dữ liệu hay không.
+      window.__vfReq = { n: 0, cuoi: '' };
     } catch (e) {}
 
     // -1) GOM LỖI JS của trang. Console của trang bị bịt ở phần dưới (để qua
