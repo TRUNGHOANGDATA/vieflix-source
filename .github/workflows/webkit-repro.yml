@@ -13,6 +13,10 @@ on:
         description: webkit | chromium
         required: false
         default: webkit
+      inject:
+        description: JS tiêm thêm ở document-start (thí nghiệm)
+        required: false
+        default: ''
 
 jobs:
   repro:
@@ -52,4 +56,6 @@ jobs:
           node cap.js
       - name: Chạy tái hiện
         working-directory: tool/webkit-repro
+        env:
+          INJECT: ${{ inputs.inject }}
         run: node repro.js ${{ inputs.engine }} "${{ inputs.url }}"

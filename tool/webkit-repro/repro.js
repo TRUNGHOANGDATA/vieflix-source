@@ -18,34 +18,42 @@ const PROBE = `(function(){
     vTime:v?v.currentTime:null, vSrc:v?String(v.currentSrc).slice(0,30):null, jw:st,
     jwErr:window.__vfJwErr||'', mse:window.__vfMse||null, req:window.__vfReq||null,
     net:(window.__vfNet||[]).slice(0,6), errs:(window.__vfErrors||[]).slice(0,6),
-    W: window.__vfW, xhr: window.__vfXhr});
+    W: window.__vfW, xhr: window.__vfXhr, MS: window.__vfMS});
 })()`;
 
+setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); }, 70000);
 (async () => {
   const browser = await (engine === 'webkit' ? webkit : chromium).launch({ headless: true });
   const ctx = await browser.newContext({ userAgent: UA, viewport: { width: 1280, height: 720 } });
   const page = await ctx.newPage();
   const log = (s) => { console.log(s); };
   await page.addInitScript(anti);              // y hệt app: tiêm ở document-start
+  if (process.env.INJECT) { log('  [tiem them] ' + process.env.INJECT.slice(0, 120)); await page.addInitScript(process.env.INJECT); }
   await page.addInitScript(() => {
-    // Soi Worker: đếm, bắt lỗi, đếm tin nhắn vào/ra, và giữ lại mã nguồn blob.
-    window.__vfW = { tao: 0, loi: [], in: 0, out: 0, src: '', apis: {} };
+    // Soi MediaSource: loại nào được dùng (MMS hay MSE thường), sourceopen có nổ không.
+    window.__vfMS = { mms: 0, mse: 0, open: 0, ended: 0, attach: 0, drp: null };
+    for (const [k, nm] of [['ManagedMediaSource', 'mms'], ['MediaSource', 'mse']]) {
+      const O = window[k]; if (!O) continue;
+      const P = function () { const o = new O(); window.__vfMS[nm]++;
+        o.addEventListener('sourceopen', () => window.__vfMS.open++);
+        o.addEventListener('sourceended', () => window.__vfMS.ended++);
+        return o; };
+      P.prototype = O.prototype; P.isTypeSupported = O.isTypeSupported && O.isTypeSupported.bind(O);
+      window[k] = P;
+    }
+    const oc = URL.createObjectURL;
+    URL.createObjectURL = function (o) {
+      if (o && (o instanceof MediaSource || (window.ManagedMediaSource && o instanceof window.ManagedMediaSource))) {
+        window.__vfMS.attach++;
+        setTimeout(() => { const v = document.querySelector('video'); window.__vfMS.drp = v ? { disableRemotePlayback: v.disableRemotePlayback, inDom: v.isConnected, muted: v.muted, autoplay: v.autoplay, playsinline: v.hasAttribute('playsinline') } : null; }, 1500);
+      }
+      return oc.apply(this, arguments);
+    };
+    // Soi Worker: đếm, bắt lỗi, đếm tin nhắn vào/ra.
+    window.__vfW = { tao: 0, loi: [], in: 0, out: 0 };
     const OW = window.Worker;
     window.Worker = function (u, o) {
       window.__vfW.tao++;
-      try {
-        fetch(String(u)).then(r => r.text()).then(t => {
-          window.__vfW.src = t.slice(0, 400);
-          const apis = {};
-          ['createImageBitmap', 'OffscreenCanvas', 'getImageData', 'WebAssembly', 'importScripts',
-           'SharedArrayBuffer', 'Atomics', 'TextDecoder', 'DOMParser', 'crypto.subtle', 'decrypt',
-           'AES-GCM', 'AES-CBC', 'appendBuffer', 'MediaSource', 'transmux', 'mp4', 'moof', 'PNG', 'IDAT',
-           'inflate', 'pako', 'fflate', 'ReadableStream', 'FileReaderSync', 'setTimeout', 'postMessage'].forEach(k => {
-            const n = t.split(k).length - 1; if (n) apis[k] = n;
-          });
-          window.__vfW.apis = apis; window.__vfW.len = t.length;
-        }).catch(e => { window.__vfW.src = 'khong doc duoc blob: ' + e; });
-      } catch (e) {}
       const w = new OW(u, o);
       w.addEventListener('error', e => { window.__vfW.loi.push(('' + (e.message || e)).slice(0, 200) + ' @' + (e.filename || '').slice(-30) + ':' + e.lineno); });
       w.addEventListener('messageerror', e => { window.__vfW.loi.push('messageerror'); });
