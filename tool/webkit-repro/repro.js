@@ -27,7 +27,12 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
   const ctx = await browser.newContext({ userAgent: UA, viewport: { width: 1280, height: 720 } });
   const page = await ctx.newPage();
   const log = (s) => { console.log(s); };
+  // Giữ console GỐC trước khi script chống-devtool bịt nó, rồi mở lại đúng 5 hàm
+  // log/debug/info/warn/error (table/clear/dir vẫn câm để lừa bộ dò Performance).
+  // Nhờ đó đọc được logger của hls.js ở luồng chính.
+  await page.addInitScript(() => { window.__vfNativeConsole = { log: console.log, debug: console.debug, info: console.info, warn: console.warn, error: console.error }; });
   await page.addInitScript(anti);              // y hệt app: tiêm ở document-start
+  await page.addInitScript(() => { const n = window.__vfNativeConsole; if (n) { for (const k of ['log', 'debug', 'info', 'warn', 'error']) { try { console[k] = n[k]; } catch (e) {} } } });
   if (process.env.INJECT) { log('  [tiem them] ' + process.env.INJECT.slice(0, 120)); await page.addInitScript(process.env.INJECT); }
   await page.addInitScript(() => {
     // Soi MediaSource: loại nào được dùng (MMS hay MSE thường), sourceopen có nổ không.
@@ -111,7 +116,7 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
       return os.apply(this, arguments);
     };
   });
-  page.on('console', m => { const t = m.text(); if (!/Array\(|console\.clear|^div$|^function/.test(t)) log(`  [console.${m.type()}] ${t.slice(0, 160)}`); });
+  page.on('console', m => { const t = m.text(); if (!/Array\(|console\.clear|^div$|^function|preconnected|^\[object|^Sun |^Mon |^Tue |^Wed |^Thu |^Fri |^Sat /.test(t)) log(`  [console.${m.type()}] ${t.slice(0, 300)}`); });
   page.on('pageerror', e => log(`  [pageerror] ${String(e).slice(0, 200)}`));
   page.on('requestfailed', r => log(`  [REQ FAIL] ${r.failure() && r.failure().errorText} ${r.url().slice(0, 110)}`));
   page.on('response', async r => {
