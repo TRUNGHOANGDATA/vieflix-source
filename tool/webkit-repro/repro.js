@@ -55,16 +55,40 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
     window.Worker = function (u, o) {
       window.__vfW.tao++;
       const w = new OW(u, o);
+      window.__vfW.msgIn = []; window.__vfW.msgOut = [];
+      const tag = (d) => { try { if (!d || typeof d !== 'object') return String(d).slice(0, 30);
+        const k = d.cmd || d.event || d.type || Object.keys(d).slice(0, 3).join('|');
+        let extra = '';
+        if (d.data && d.data.details) extra = ':' + d.data.details; else if (d.data && d.data.type) extra = ':' + d.data.type;
+        if (d.data && d.data.reason) extra += ':' + String(d.data.reason).slice(0, 60);
+        if (d.data && d.data.error) extra += ':' + String(d.data.error.message || d.data.error).slice(0, 60);
+        if (d.data && d.data.byteLength != null) extra += ':' + d.data.byteLength + 'B';
+        if (d.data && d.data.data1 && d.data.data1.byteLength != null) extra += ':d1=' + d.data.data1.byteLength + 'B';
+        if (d.data && d.data.tracks) extra += ':tracks=' + Object.keys(d.data.tracks).join('+');
+        return (k + extra).slice(0, 90); } catch (e) { return '?'; } };
       w.addEventListener('error', e => { window.__vfW.loi.push(('' + (e.message || e)).slice(0, 200) + ' @' + (e.filename || '').slice(-30) + ':' + e.lineno); });
       w.addEventListener('messageerror', e => { window.__vfW.loi.push('messageerror'); });
-      w.addEventListener('message', () => { window.__vfW.out++; });
+      w.addEventListener('message', (e) => { window.__vfW.out++; if (window.__vfW.msgOut.length < 14) window.__vfW.msgOut.push(tag(e.data)); });
       const pm = w.postMessage.bind(w);
-      w.postMessage = function () { window.__vfW.in++; return pm.apply(w, arguments); };
+      w.postMessage = function (d) { window.__vfW.in++; if (window.__vfW.msgIn.length < 10) window.__vfW.msgIn.push(tag(d)); return pm.apply(w, arguments); };
       return w;
     };
     window.Worker.prototype = OW.prototype;
     // XHR: ghi lại số byte thật sự nhận được cho segment.
     window.__vfXhr = [];
+    const oo = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (m, u) {
+      this.__vfUrl = u;
+      // Đăng ký NGAY trong open() -> nổ TRƯỚC onreadystatechange của hls.js,
+      // tức đọc được số byte trước khi nó transfer buffer sang Worker.
+      this.addEventListener('readystatechange', () => {
+        if (this.readyState !== 4) return;
+        try { const uu = String(this.responseURL || u); if (/amass|\.png/.test(uu)) {
+          const n = this.response && this.response.byteLength != null ? this.response.byteLength : -1;
+          if (window.__vfXhr.length < 8) window.__vfXhr.push(`SOM ${this.status} bytes=${n} ${uu.slice(-30)}`); } } catch (e) {}
+      });
+      return oo.apply(this, arguments);
+    };
     const os = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.send = function () {
       const x = this;
