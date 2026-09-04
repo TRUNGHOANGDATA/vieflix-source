@@ -88,8 +88,10 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
     document.addEventListener('loadstart', (e) => { if (e.target && e.target.tagName === 'VIDEO') who('EVENT loadstart'); }, true);
     // Giữ lại Blob playlist đã giải mã để thử phát native.
     const oc = URL.createObjectURL;
+    window.__vfMsObjs = [];
     URL.createObjectURL = function (o) {
       if (o && o.type && /mpegurl/i.test(o.type)) { window.__vfM3u8BlobObj = o; }
+      if (o && (o instanceof MediaSource || (window.ManagedMediaSource && o instanceof window.ManagedMediaSource))) window.__vfMsObjs.push(o);
       if (o && (o instanceof MediaSource || (window.ManagedMediaSource && o instanceof window.ManagedMediaSource))) {
         window.__vfMS.attach++;
         setTimeout(() => { const v = document.querySelector('video'); window.__vfMS.drp = v ? { disableRemotePlayback: v.disableRemotePlayback, inDom: v.isConnected, muted: v.muted, autoplay: v.autoplay, playsinline: v.hasAttribute('playsinline') } : null; }, 1500);
@@ -161,12 +163,12 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
     if (s >= 400 || /\.m3u8|\.ts\b|\.m4s|segment|chunk|\.mp4|embed15|embed18|streamc/.test(u))
       log(`  [${s}] ${ct.padEnd(30)} ${u.slice(0, 120)}`);
   });
-  log(`=== ${engine.toUpperCase()} -> ${URL}`);
+  log(`=== ${engine.toUpperCase()} -> ${URL}` + (process.env.NOAUTO ? '  [KHONG tiem script tu-phat]' : ''));
   await page.goto(URL, { referer: 'http://127.0.0.1:5555/', waitUntil: 'domcontentloaded' });
   // Tiêm autoplay như app (onLoadStop + nhịp tự lành)
   for (let i = 0; i < 12; i++) {
     await page.waitForTimeout(2500);
-    try { await page.evaluate(auto); } catch (e) {}
+    if (!process.env.NOAUTO) { try { await page.evaluate(auto); } catch (e) {} }
     try { log(`  t=${(i + 1) * 2.5}s ${await page.evaluate(PROBE)}`); } catch (e) { log('  probe loi ' + e); }
   }
   browser.close().catch(() => {}); setTimeout(() => process.exit(0), 1500);

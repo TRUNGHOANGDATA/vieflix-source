@@ -17,6 +17,10 @@ on:
         description: JS tiêm thêm ở document-start (thí nghiệm)
         required: false
         default: ''
+      noauto:
+        description: '1 = KHÔNG tiêm script tự-phát của app'
+        required: false
+        default: ''
 
 jobs:
   repro:
@@ -58,4 +62,5 @@ jobs:
         working-directory: tool/webkit-repro
         env:
           INJECT: ${{ inputs.inject }}
+          NOAUTO: ${{ inputs.noauto }}
         run: node repro.js ${{ inputs.engine }} "${{ inputs.url }}"
