@@ -30,6 +30,8 @@ Future<void> main() async {
   }
   final store = LocalStore();
   await store.init();
+  // Lần đầu chạy trên máy này: đặt mặc định nguồn theo nền tảng (iOS tắt nguonc).
+  await store.seedDefaultSourcesOnce();
   runApp(ProviderScope(
     overrides: [
       storeProvider.overrideWithValue(store),
@@ -41,7 +43,9 @@ Future<void> main() async {
             .map((s) => s.id)
             .where((id) => !off.contains(id))
             .toSet();
-        return on.isEmpty ? {kSrcNguonc} : on;
+        // Không còn nguồn nào bật -> lấy nguồn ĐẦU TIÊN app dùng được trên máy này
+        // (iOS: phimapi, vì nguonc không phát được — xem seedDefaultSourcesOnce).
+        return on.isEmpty ? {Platform.isIOS ? kSrcPhimApi : kSrcNguonc} : on;
       }),
     ],
     child: const MyApp(),

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/movie.dart';
+import 'movie_source.dart' show kSrcNguonc;
 
 class WatchProgress {
   final String slug, name, poster, server, episodeSlug, episodeName;
@@ -48,6 +49,7 @@ class LocalStore {
   static const _kProg = 'progress_v1';
   static const _kTmdb = 'tmdb_key';
   static const _kSrcOff = 'sources_off_v1'; // các nguồn phim BỊ TẮT
+  static const _kSrcSeeded = 'sources_seeded_v1'; // đã đặt mặc định theo máy chưa
   static const _maxProgress = 200; // Giữ 200 phim xem gần nhất
   late SharedPreferences _p;
   final List<Movie> _favorites = [];
@@ -126,6 +128,23 @@ class LocalStore {
   // Lưu danh sách nguồn BỊ TẮT: nguồn mới thêm về sau mặc định là BẬT.
   Set<String> get disabledSources =>
       (_p.getStringList(_kSrcOff) ?? const <String>[]).toSet();
+
+  /// Đặt MẶC ĐỊNH theo nền tảng, CHỈ một lần cho mỗi máy.
+  ///
+  /// iOS: tắt sẵn nguonc. Trang phát của nguonc không chạy trong WebView của
+  /// iPad — đo trên chính WebKit của Apple: dữ liệu tải về đủ nhưng player của
+  /// họ gắn ManagedMediaSource xong không tạo nổi SourceBuffer nên đứng ở
+  /// "đang tải" mãi. Safari thật cũng vậy, nên không sửa được từ app.
+  ///
+  /// Chỉ là MẶC ĐỊNH: người dùng vẫn bật lại được trong Cài đặt, và lựa chọn đó
+  /// được tôn trọng vì cờ này chặn không cho ghi đè lần sau.
+  Future<void> seedDefaultSourcesOnce() async {
+    if (_p.getBool(_kSrcSeeded) == true) return;
+    await _p.setBool(_kSrcSeeded, true);
+    if (!Platform.isIOS) return;
+    final off = disabledSources..add(kSrcNguonc);
+    await _p.setStringList(_kSrcOff, off.toList());
+  }
 
   Future<void> setSourceEnabled(String id, bool on) async {
     final off = disabledSources;

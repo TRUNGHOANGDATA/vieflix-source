@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -349,9 +350,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   style: const TextStyle(color: Colors.white)),
               subtitle: Text(
                 src.id == kSrcNguonc
-                    ? 'phim.nguonc.com — nguồn gốc của app'
+                    ? (Platform.isIOS
+                        // Đo trên chính WebKit của Apple: dữ liệu tải về đủ nhưng
+                        // trình phát của nguonc không dựng nổi bộ đệm nên đứng
+                        // hình. Safari thật cũng vậy -> app không sửa được.
+                        ? 'phim.nguonc.com — KHÔNG phát được trên iPad (kể cả Safari). '
+                            'Bật lên thì phim của nguồn này chỉ xem được bằng nút "Mở Safari".'
+                        : 'phim.nguonc.com — nguồn gốc của app')
                     : 'phimapi.com — kho phim lớn, có sẵn link phát trực tiếp',
-                style: const TextStyle(color: Colors.white38, fontSize: 12),
+                style: TextStyle(
+                    color: (Platform.isIOS && src.id == kSrcNguonc)
+                        ? kAmber
+                        : Colors.white38,
+                    fontSize: 12),
               ),
               onChanged: (v) => _toggleSource(src.id, v),
             ),
