@@ -163,6 +163,9 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
     if (s >= 400 || /\.m3u8|\.ts\b|\.m4s|segment|chunk|\.mp4|embed15|embed18|streamc/.test(u))
       log(`  [${s}] ${ct.padEnd(30)} ${u.slice(0, 120)}`);
   });
+  // Chặn devtool-guard: trên runner chậm nó dương tính giả ngẫu nhiên rồi phạt
+  // for(;;) location.reload() -> reload bị vô hiệu -> trang đứng hình. Loại nhiễu.
+  if (!process.env.KEEP_GUARD) await page.route('**/devtool-guard.bundle.js', r => r.abort());
   log(`=== ${engine.toUpperCase()} -> ${URL}` + (process.env.NOAUTO ? '  [KHONG tiem script tu-phat]' : ''));
   await page.goto(URL, { referer: 'http://127.0.0.1:5555/', waitUntil: 'domcontentloaded' });
   // Tiêm autoplay như app (onLoadStop + nhịp tự lành)
