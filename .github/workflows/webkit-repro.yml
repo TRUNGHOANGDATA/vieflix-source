@@ -1,0 +1,55 @@
+# Tái hiện trang embed nguonc trên WebKit THẬT của Apple (có MediaSource/AVFoundation)
+# để soi vì sao iPad không phát được — không có Mac nên mượn máy ảo macOS ở đây.
+name: WebKit repro
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Link embed cần thử
+        required: true
+        default: https://embed18.streamc.xyz/embed.php?hash=448155e801ad6d279c5ec02dff435d5a
+      engine:
+        description: webkit | chromium
+        required: false
+        default: webkit
+
+jobs:
+  repro:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Cài Playwright + WebKit
+        working-directory: tool/webkit-repro
+        run: |
+          npm init -y >/dev/null
+          npm i playwright@latest >/dev/null
+          npx playwright install --with-deps ${{ inputs.engine }}
+      - name: Năng lực media của nhân này
+        working-directory: tool/webkit-repro
+        run: |
+          cat > cap.js <<'JS'
+          const pw = require('playwright');
+          (async () => {
+            const b = await pw['${{ inputs.engine }}'].launch(); const p = await b.newPage();
+            await p.goto('https://embed18.streamc.xyz/', { waitUntil: 'domcontentloaded' }).catch(() => {});
+            console.log(JSON.stringify(await p.evaluate(() => {
+              const MS = window.MediaSource || window.ManagedMediaSource;
+              const t = (m) => { try { return MS && MS.isTypeSupported(m); } catch (e) { return 'err'; } };
+              return { MediaSource: typeof window.MediaSource, ManagedMediaSource: typeof window.ManagedMediaSource,
+                Worker: typeof Worker, sw: !!navigator.serviceWorker, subtle: !!(crypto && crypto.subtle),
+                avc1_4d4028: t('video/mp4;codecs="avc1.4d4028"'), mp4a: t('audio/mp4;codecs="mp4a.40.2"'),
+                hlsNative: document.createElement('video').canPlayType('application/vnd.apple.mpegurl'),
+                ua: navigator.userAgent };
+            })));
+            await b.close();
+          })();
+          JS
+          node cap.js
+      - name: Chạy tái hiện
+        working-directory: tool/webkit-repro
+        run: node repro.js ${{ inputs.engine }} "${{ inputs.url }}"
