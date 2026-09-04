@@ -46,8 +46,14 @@ final updateProvider = FutureProvider<UpdateInfo?>((ref) => UpdateChecker().chec
 /// storeProvider được override ở main sau khi init().
 final storeProvider = Provider<LocalStore>((ref) => throw UnimplementedError());
 
-/// Khóa TMDB mặc định (khóa cá nhân người dùng cung cấp; có thể đổi ở Cài đặt).
-const kDefaultTmdbKey = '8ef7373103c6691be809f158bee8b65e';
+/// Khóa TMDB mặc định, NHÚNG LÚC BUILD chứ không viết thẳng vào mã nguồn:
+///
+///     flutter build ... --dart-define=TMDB_KEY=<khoa cua ban>
+///
+/// Repo này công khai nên để khóa trong mã là đưa khóa cho cả thiên hạ. Không
+/// truyền gì thì chuỗi rỗng — app vẫn chạy bình thường, chỉ là không hiện điểm
+/// đánh giá TMDB cho tới khi người dùng tự nhập khóa ở Cài đặt.
+const kDefaultTmdbKey = String.fromEnvironment('TMDB_KEY');
 
 /// Khóa TMDB (override ở main từ store; cập nhật khi lưu ở Cài đặt).
 final tmdbKeyProvider = StateProvider<String>((ref) => kDefaultTmdbKey);

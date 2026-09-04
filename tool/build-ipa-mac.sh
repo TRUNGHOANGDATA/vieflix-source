@@ -18,7 +18,11 @@ xcode-select -p >/dev/null 2>&1 || { echo "LỖI: chưa có Xcode Command Line T
 
 echo "==> Flutter: $(flutter --version | head -1)"
 flutter pub get
-flutter build ios --release --no-codesign
+# Khóa TMDB nhúng lúc build (không nằm trong mã nguồn). Không có cũng chạy,
+# chỉ là thiếu điểm đánh giá cho tới khi người dùng nhập khóa ở Cài đặt.
+DEFINE=""
+if [ -n "${TMDB_KEY:-}" ]; then DEFINE="--dart-define=TMDB_KEY=$TMDB_KEY"; fi
+flutter build ios --release --no-codesign $DEFINE
 
 APP=build/ios/iphoneos/Runner.app
 

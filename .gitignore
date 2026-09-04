@@ -61,3 +61,6 @@ app.*.map.json
 
 # Log build dán tạm ra file
 /brel.txt
+
+# File cài đã dựng — không đưa vào mã nguồn (repo công khai + phình .git)
+*.ipa

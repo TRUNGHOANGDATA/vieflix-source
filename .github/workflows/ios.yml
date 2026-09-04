@@ -36,7 +36,12 @@ jobs:
         run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
 
       - name: Build iOS (chưa ký)
-        run: flutter build ios --release --no-codesign
+        env:
+          TMDB_KEY: ${{ secrets.TMDB_KEY }}
+        run: |
+          DEFINE=""
+          if [ -n "$TMDB_KEY" ]; then DEFINE="--dart-define=TMDB_KEY=$TMDB_KEY"; fi
+          flutter build ios --release --no-codesign $DEFINE
 
       # `ldid` của AltStore chỉ đọc được Mach-O MỘT kiến trúc. Bản build để lại
       # vài binary "fat" (nhiều kiến trúc) — đo thật trên .ipa thấy
