@@ -18,7 +18,7 @@ const PROBE = `(function(){
     vTime:v?v.currentTime:null, vSrc:v?String(v.currentSrc).slice(0,30):null, jw:st,
     jwErr:window.__vfJwErr||'', mse:window.__vfMse||null, req:window.__vfReq||null,
     net:(window.__vfNet||[]).slice(0,6), errs:(window.__vfErrors||[]).slice(0,6),
-    W: window.__vfW, xhr: window.__vfXhr, MS: window.__vfMS});
+    W: window.__vfW, xhr: window.__vfXhr, MS: window.__vfMS, test: window.__vfTest});
 })()`;
 
 setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); }, 70000);
