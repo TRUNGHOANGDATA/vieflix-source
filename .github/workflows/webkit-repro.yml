@@ -21,6 +21,14 @@ on:
         description: '1 = KHÔNG tiêm script tự-phát của app'
         required: false
         default: ''
+      block_ads:
+        description: "'' | 3rd | all — chặn quảng cáo bên thứ ba / cả ads.js của streamc"
+        required: false
+        default: ''
+      force_popup:
+        description: '1 = ép popupReady=true (dùng khi chặn ads.js)'
+        required: false
+        default: ''
 
 jobs:
   repro:
@@ -63,4 +71,6 @@ jobs:
         env:
           INJECT: ${{ inputs.inject }}
           NOAUTO: ${{ inputs.noauto }}
+          BLOCK_ADS: ${{ inputs.block_ads }}
+          FORCE_POPUP: ${{ inputs.force_popup }}
         run: node repro.js ${{ inputs.engine }} "${{ inputs.url }}"

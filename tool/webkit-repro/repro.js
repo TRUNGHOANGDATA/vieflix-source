@@ -162,6 +162,17 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
     if (s >= 400 || /\.m3u8|\.ts\b|\.m4s|segment|chunk|\.mp4|embed15|embed18|streamc/.test(u))
       log(`  [${s}] ${ct.padEnd(30)} ${u.slice(0, 120)}`);
   });
+  // Bisect: chặn quảng cáo theo lớp. BLOCK_ADS=3rd -> chỉ bên thứ ba; =all -> cả ads.js/detect.js của streamc.
+  if (process.env.BLOCK_ADS) {
+    const third = /dtscout|dtsedge|dtscdn|crwdcntrl|udience|tynt|amung|waust|jwpltx|bundlemoviepumice|displayendpointstarring/;
+    const all = /streamc\.xyz\/ads(\.js|\/)/;
+    await page.route(u => third.test(u) || (process.env.BLOCK_ADS === 'all' && all.test(u)), r => r.abort());
+    log('  [chan quang cao: ' + process.env.BLOCK_ADS + ']');
+  }
+  if (process.env.FORCE_POPUP) {
+    await page.addInitScript(() => { try { Object.defineProperty(window, 'popupReady', { configurable: true, get: () => true, set: () => {} }); Object.defineProperty(window, 'popupFailed', { configurable: true, get: () => false, set: () => {} }); } catch (e) {} });
+    log('  [ep popupReady=true]');
+  }
   log(`=== ${engine.toUpperCase()} -> ${URL}` + (process.env.NOAUTO ? '  [KHONG tiem script tu-phat]' : ''));
   await page.goto(URL, { referer: 'http://127.0.0.1:5555/', waitUntil: 'domcontentloaded' });
   // Tiêm autoplay như app (onLoadStop + nhịp tự lành)
