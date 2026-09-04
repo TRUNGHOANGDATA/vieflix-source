@@ -32,6 +32,7 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
   // log/debug/info/warn/error (table/clear/dir vẫn câm để lừa bộ dò Performance).
   // Nhờ đó đọc được logger của hls.js ở luồng chính.
   await page.addInitScript(() => { window.__vfNativeConsole = { log: console.log, debug: console.debug, info: console.info, warn: console.warn, error: console.error }; });
+  await page.addInitScript(() => { if (window === window.top) { let n = 0; setInterval(() => { try { (window.__vfNativeConsole || console).log('VFTICK ' + (++n) + ' ' + Math.round(performance.now() / 1000) + 's'); } catch (e) {} }, 1000); } });
   await page.addInitScript(anti);              // y hệt app: tiêm ở document-start
   await page.addInitScript(() => { const n = window.__vfNativeConsole; if (n) { for (const k of ['log', 'debug', 'info', 'warn', 'error']) { try { console[k] = n[k]; } catch (e) {} } } });
   if (process.env.INJECT) { log('  [tiem them] ' + process.env.INJECT.slice(0, 120)); await page.addInitScript(process.env.INJECT); }
@@ -152,7 +153,7 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
       return os.apply(this, arguments);
     };
   });
-  page.on('console', m => { const t = m.text(); if (!/Array\(|console\.clear|^div$|^function|preconnected|^\[object|^Sun |^Mon |^Tue |^Wed |^Thu |^Fri |^Sat /.test(t)) log(`  [console.${m.type()}] ${t.slice(0, 300)}`); });
+  page.on('console', m => { const t = m.text(); if (t.startsWith('VFTICK')) { if (/ (1|2|3|5|8|13|21|34) /.test(t)) log('  ' + t); return; } if (!/Array\(|console\.clear|^div$|^function|preconnected|^\[object|^Sun |^Mon |^Tue |^Wed |^Thu |^Fri |^Sat /.test(t)) log(`  [console.${m.type()}] ${t.slice(0, 300)}`); });
   page.on('pageerror', e => log(`  [pageerror] ${String(e).slice(0, 200)}`));
   page.on('requestfailed', r => log(`  [REQ FAIL] ${r.failure() && r.failure().errorText} ${r.url().slice(0, 110)}`));
   page.on('response', async r => {
@@ -166,8 +167,9 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
   // Tiêm autoplay như app (onLoadStop + nhịp tự lành)
   for (let i = 0; i < 12; i++) {
     await page.waitForTimeout(2500);
-    if (!process.env.NOAUTO) { try { await page.evaluate(auto); } catch (e) {} }
-    try { log(`  t=${(i + 1) * 2.5}s ${await page.evaluate(PROBE)}`); } catch (e) { log('  probe loi ' + e); }
+    const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT ' + ms + 'ms')), ms))]);
+    if (!process.env.NOAUTO) { try { await withTimeout(page.evaluate(auto), 4000); } catch (e) { log('  auto: ' + String(e).slice(0, 60)); } }
+    try { log(`  t=${(i + 1) * 2.5}s ${await withTimeout(page.evaluate(PROBE), 4000)}`); } catch (e) { log(`  t=${(i + 1) * 2.5}s probe loi ` + String(e).slice(0, 80)); }
   }
   browser.close().catch(() => {}); setTimeout(() => process.exit(0), 1500);
 })().catch(e => { console.error('LOI:', e); process.exit(1); });
