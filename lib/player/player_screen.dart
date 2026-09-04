@@ -180,6 +180,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// Link mà WebView bắt đầu nạp gần nhất — dùng để biết cổng Referer có dẫn
   /// được sang trang phim hay không.
   String _lastNavStart = '';
+
+  /// Tăng mỗi lần nạp trang. Dùng làm khoá của WebView để Flutter DỰNG LẠI nó
+  /// (chỉ đổi `initialUrlRequest` thì không ăn — đó là tham số lúc tạo).
+  int _navSeq = 0;
   Timer? _gateT;
 
   /// Link THẬT đưa cho WebView. Thường bằng [_url], nhưng với nguồn chặn
@@ -870,23 +874,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   ///
   /// [viaController] = true khi WebView đã có sẵn (đổi tập): nạp đè bằng
   /// controller cho nhanh, khỏi dựng lại cả WebView.
-  Future<void> _setEmbedUrl(String url, {bool viaController = false}) async {
-    if (_url != url) {
-      _url = url;
-      if (!viaController) {
-        _navUrl = null; // đừng để WebView kịp nạp lại link của tập cũ
-        if (mounted) setState(() {});
-      }
-    }
+  Future<void> _setEmbedUrl(String url) async {
+    _url = url;
+    // LUÔN dựng LẠI WebView, KHÔNG nạp đè bằng controller.loadUrl.
+    //
+    // Vì sao: trên iPad, tập MỞ ĐẦU (đi qua initialUrlRequest của một WebView
+    // mới) phát được, còn ĐỔI TẬP (nạp đè vào WebView cũ) thì luồng không nạp
+    // nổi — MediaSource gắn xong mà buffered vẫn rỗng. Dựng lại thì mọi tập đi
+    // đúng con đường đang chạy được, và cũng khỏi sót trạng thái của trang tập
+    // trước (player cũ, interval cũ, cờ cũ của họ).
+    //
+    // Giá phải trả: đổi tập chậm hơn chút vì WebView dựng lại từ đầu.
+    _navSeq++;
+    if (mounted) setState(() => _navUrl = null);
     final nav = await RefererGate.urlFor(url);
     if (!mounted || _url != url) return; // đã đổi tập/nguồn trong lúc chờ
     vlog('embed', 'mo trang embed: $url' + (nav == url ? '' : ' (qua cong $nav)'));
-    if (viaController && _c != null) {
-      _navUrl = nav;
-      await _c!.loadUrl(urlRequest: URLRequest(url: WebUri(nav)));
-    } else {
-      setState(() => _navUrl = nav);
-    }
+    setState(() => _navUrl = nav);
     _armGateWatchdog(url, nav);
   }
 
@@ -901,8 +905,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       if (!mounted || _url != target) return;
       if (!RefererGate.isGateUrl(_lastNavStart)) return; // đã sang trang phim
       vlog('embed', 'cong khong dan sang trang phim sau 8s -> nap thang $target');
-      _navUrl = target;
-      _c?.loadUrl(urlRequest: URLRequest(url: WebUri(target)));
+      _navSeq++;
+      setState(() => _navUrl = target);
     });
   }
 
@@ -918,7 +922,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       _closeNative();
       setState(() => _native = false);
     }
-    _setEmbedUrl(ep.embed, viaController: true);
+    _setEmbedUrl(ep.embed);
   }
 
   /// Đổi sang nguồn khác, GIỮ NGUYÊN tập và vị trí đang xem.
@@ -1018,7 +1022,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               scale: 1.0,
               onPressed: () {
                 setState(() => _webError = null);
-                _setEmbedUrl(_url, viaController: true);
+                _setEmbedUrl(_url);
               },
               builder: (f) => _errBtn('Thử lại', f, dam: false),
             ),
@@ -1457,6 +1461,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       );
     }
     final w = InAppWebView(
+              key: ValueKey('vf-web-$_navSeq'),
               // Windows: môi trường WebView2 đã mở khóa autoplay (main.dart).
               webViewEnvironment: webViewEnvironment,
               initialUrlRequest: URLRequest(url: WebUri(nav)),
