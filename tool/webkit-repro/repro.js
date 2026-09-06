@@ -173,6 +173,21 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
     await page.addInitScript(() => { try { Object.defineProperty(window, 'popupReady', { configurable: true, get: () => true, set: () => {} }); Object.defineProperty(window, 'popupFailed', { configurable: true, get: () => false, set: () => {} }); } catch (e) {} });
     log('  [ep popupReady=true]');
   }
+  // Thí nghiệm: THAY jwplayer.js của trang bằng bản khác (SWAP_JW=8.50.1).
+  // Chặn script cũ, rồi tự chèn script bản mới ngay lúc mở trang.
+  if (process.env.SWAP_JW) {
+    const v = process.env.SWAP_JW;
+    await page.route(/jwpcdn\.com\/player\/v\/[0-9.]+\/jwplayer\.js/, r => r.abort());
+    await page.addInitScript((v) => {
+      if (window !== window.top) return;
+      const s = document.createElement('script');
+      s.src = 'https://ssl.p.jwpcdn.com/player/v/' + v + '/jwplayer.js';
+      s.async = false;
+      (document.head || document.documentElement).appendChild(s);
+      window.__vfTest = ['jwplayer thay bang ' + v];
+    }, v);
+    log('  [thay jwplayer -> ' + v + ']');
+  }
   log(`=== ${engine.toUpperCase()} -> ${URL}` + (process.env.NOAUTO ? '  [KHONG tiem script tu-phat]' : ''));
   await page.goto(URL, { referer: 'http://127.0.0.1:5555/', waitUntil: 'domcontentloaded' });
   // Tiêm autoplay như app (onLoadStop + nhịp tự lành)

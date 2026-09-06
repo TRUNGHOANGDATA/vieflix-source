@@ -29,6 +29,10 @@ on:
         description: '1 = ép popupReady=true (dùng khi chặn ads.js)'
         required: false
         default: ''
+      swap_jw:
+        description: 'Thay jwplayer.js của trang bằng bản này, vd 8.50.1'
+        required: false
+        default: ''
 
 jobs:
   repro:
@@ -73,4 +77,5 @@ jobs:
           NOAUTO: ${{ inputs.noauto }}
           BLOCK_ADS: ${{ inputs.block_ads }}
           FORCE_POPUP: ${{ inputs.force_popup }}
+          SWAP_JW: ${{ inputs.swap_jw }}
         run: node repro.js ${{ inputs.engine }} "${{ inputs.url }}"
