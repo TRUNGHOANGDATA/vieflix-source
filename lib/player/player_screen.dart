@@ -185,6 +185,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// (chỉ đổi `initialUrlRequest` thì không ăn — đó là tham số lúc tạo).
   int _navSeq = 0;
   Timer? _gateT;
+  Timer? _wakeT;
 
   /// Link THẬT đưa cho WebView. Thường bằng [_url], nhưng với nguồn chặn
   /// hotlink thì là trang cổng nội bộ tự nhảy sang [_url] để trình duyệt sinh
@@ -274,7 +275,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     // trình phát native CỦA NÓ, nên đường WebView (nguồn nguonc) bị máy tự tắt
     // màn hình giữa chừng khi lâu không chạm. Buộc theo MÀN HÌNH TRÌNH PHÁT
     // thay vì theo trạng thái đang phát: đơn giản, và trả lại ở dispose.
-    WakelockPlus.enable().catchError((_) {});
+    _giuManHinhSang();
+    // Kiểm LẠI theo nhịp chứ không bật một lần rồi thôi: cờ giữ-màn-hình là
+    // của cả hệ thống, media_kit cũng tự bật/tắt nó theo trạng thái phát của
+    // riêng nó (đếm tham chiếu bên trong), nên chỉ cần nó tạm dừng một nhịp là
+    // cờ của mình bị xoá và màn hình tối giữa lúc đang xem. Hỏi rồi mới bật nên
+    // hầu hết nhịp không gọi xuống hệ thống.
+    _wakeT = Timer.periodic(const Duration(seconds: 5), (_) => _giuManHinhSang());
     _resumeTo = widget.startPosition;
     _resumeApplied = widget.startPosition <= 2;
     // ESC (PC) / phím remote (TV)
@@ -322,6 +329,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _closeNative();
     HlsPreparer.shutdown(); // tắt máy chủ playlist nội bộ khi rời trình phát
     _gateT?.cancel();
+    _wakeT?.cancel();
     RefererGate.shutdown(); // và cả cổng Referer
     WakelockPlus.disable().catchError((_) {}); // cho màn hình được tắt lại
     _nextT?.cancel();
@@ -342,6 +350,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         state == AppLifecycleState.detached) {
       _flushPosition();
     }
+    // Quay lại app: hệ thống có thể đã đặt lại cờ giữ-màn-hình, bật lại ngay
+    // chứ đừng đợi tới nhịp kiểm tiếp theo.
+    if (state == AppLifecycleState.resumed) _giuManHinhSang();
+  }
+
+  /// Giữ màn hình sáng suốt lúc ở trong trình phát.
+  ///
+  /// Hỏi trạng thái trước rồi mới bật, để không gọi xuống hệ thống mỗi nhịp.
+  /// Lỗi thì bỏ qua — không xem được phim vì chuyện này thì vô lý.
+  Future<void> _giuManHinhSang() async {
+    try {
+      if (!await WakelockPlus.enabled) await WakelockPlus.enable();
+    } catch (_) {}
   }
 
   // ================= Trình phát native (m3u8) =================
