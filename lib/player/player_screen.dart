@@ -212,7 +212,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _hlsFailed = false;   // hls lỗi -> đã rơi về embed, đừng thử lại vòng vo
   double _pendingSeek = 0;   // giây cần tua tới NGAY KHI player sẵn sàng
   int _seekTries = 0;
-  double _adsSkipped = 0;    // số giây quảng cáo đã cắt khỏi luồng
 
   /// Bật trên Windows và Android/TV. Có link m3u8 là phát thẳng bằng trình phát
   /// của app: bỏ được trang embed, và quan trọng hơn là CẮT ĐƯỢC quảng cáo chèn
@@ -433,7 +432,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               '= ${cleaned.removedSeconds.toStringAsFixed(1)}s');
       if (cleaned != null && mounted && _native) {
         toPlay = cleaned.url;
-        _adsSkipped = cleaned.removedSeconds;
         // Không hiện thông báo — người xem đã than dòng đỏ dưới màn hình gây
         // chối mắt mỗi lần mở phim. Số liệu vẫn có trong nhật ký ở trên.
       }

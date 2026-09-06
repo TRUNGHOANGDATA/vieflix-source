@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/movie.dart';
-import 'movie_source.dart' show kSrcNguonc;
 
 class WatchProgress {
   final String slug, name, poster, server, episodeSlug, episodeName;
