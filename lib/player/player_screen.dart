@@ -500,7 +500,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   void _closeNative() {
     _pendingSeek = 0;
     _seekTries = 0;
-    _adsSkipped = 0;
     for (final s in _nsubs) {
       s.cancel();
     }
