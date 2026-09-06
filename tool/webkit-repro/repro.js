@@ -177,14 +177,26 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
   // Chặn script cũ, rồi tự chèn script bản mới ngay lúc mở trang.
   if (process.env.SWAP_JW) {
     const v = process.env.SWAP_JW;
-    await page.route(/jwpcdn\.com\/player\/v\/[0-9.]+\/jwplayer\.js/, r => r.abort());
+    // Chỉ chặn bản KHÁC bản thay vào (lần trước chặn luôn cả bản mới, tự hại mình).
+    await page.route(/jwpcdn\.com\/player\/v\/[0-9.]+\/jwplayer\.js/, r => {
+      if (r.request().url().includes('/v/' + v + '/')) return r.continue();
+      return r.abort();
+    });
     await page.addInitScript((v) => {
       if (window !== window.top) return;
-      const s = document.createElement('script');
-      s.src = 'https://ssl.p.jwpcdn.com/player/v/' + v + '/jwplayer.js';
-      s.async = false;
-      (document.head || document.documentElement).appendChild(s);
-      window.__vfTest = ['jwplayer thay bang ' + v];
+      window.__vfTest = ['dang chen jwplayer ' + v];
+      // document.head còn null ở document-start trên WebKit -> đợi có rồi chèn.
+      const chen = () => {
+        const cha = document.head || document.documentElement;
+        if (!cha) { setTimeout(chen, 5); return; }
+        const s = document.createElement('script');
+        s.src = 'https://ssl.p.jwpcdn.com/player/v/' + v + '/jwplayer.js';
+        s.async = false;
+        s.onload = () => { window.__vfTest.push('jwplayer ' + v + ' da tai, version=' + (window.jwplayer && window.jwplayer.version)); };
+        s.onerror = () => { window.__vfTest.push('jwplayer ' + v + ' LOI tai'); };
+        cha.appendChild(s);
+      };
+      chen();
     }, v);
     log('  [thay jwplayer -> ' + v + ']');
   }
