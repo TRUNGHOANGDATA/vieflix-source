@@ -330,6 +330,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     HlsPreparer.shutdown(); // tắt máy chủ playlist nội bộ khi rời trình phát
     _gateT?.cancel();
     _wakeT?.cancel();
+    _stallT?.cancel();
     RefererGate.shutdown(); // và cả cổng Referer
     WakelockPlus.disable().catchError((_) {}); // cho màn hình được tắt lại
     _nextT?.cancel();
@@ -413,11 +414,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       if (!mounted || !_native || !v) return;
       _armAutoNext();
     }));
-    // Host m3u8 hay đổi/hết hạn -> rơi về link embed thay vì đứng hình.
     _nsubs.add(p.stream.error.listen((e) {
       vlog('player', 'mpv bao loi: $e');
       if (!mounted || !_native) return;
-      _fallbackToEmbed(e);
+      _onNativeError('$e');
     }));
 
     _pendingSeek = startAt;
@@ -510,6 +510,40 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _np?.dispose();
     _np = null;
     _nvc = null;
+  }
+
+  Timer? _stallT;
+  int _nativeRetries = 0;
+
+  /// mpv báo lỗi: ĐỪNG rơi về trang nhúng ngay.
+  ///
+  /// Lỗi duy nhất từng ghi được là `tcp: ffurl_read returned 0xffffff76` — đứt
+  /// kết nối TẠM ở một phân đoạn, mpv thường tự nối lại và phim vẫn chạy. Trước
+  /// đây cứ có lỗi là nhảy sang trang nhúng của nguồn, mà trang đó chèn quảng
+  /// cáo giữa phim — người xem than "phimapi không chặn được quảng cáo" chính là
+  /// ca này, bộ lọc chẳng dính gì vì lúc đó đã không còn phát native.
+  ///
+  /// Nên: đợi 8 giây xem phim có nhích không. Nhích -> lỗi tạm, bỏ qua. Đứng ->
+  /// mở lại native ĐÚNG chỗ đang xem, tối đa 2 lần. Thua cả 2 mới rơi về.
+  void _onNativeError(String why) {
+    _stallT?.cancel();
+    final posLucLoi = _pos;
+    _stallT = Timer(const Duration(seconds: 8), () {
+      if (!mounted || !_native) return;
+      if (_paused) return; // người xem tự dừng thì không tính là đứng
+      if (_pos > posLucLoi + 0.5) {
+        vlog('player', 'loi tam (phim van chay tu ${posLucLoi.toStringAsFixed(0)}s -> ${_pos.toStringAsFixed(0)}s) -> bo qua');
+        return;
+      }
+      final ep = _curEp;
+      if (_nativeRetries < 2 && ep != null && ep.m3u8.isNotEmpty) {
+        _nativeRetries++;
+        vlog('player', 'phim dung sau loi -> mo lai native lan $_nativeRetries tai ${posLucLoi.toStringAsFixed(0)}s');
+        _openNative(ep.m3u8, posLucLoi);
+        return;
+      }
+      _fallbackToEmbed('$why (da mo lai $_nativeRetries lan van dung)');
+    });
   }
 
   /// hls hỏng -> quay về trang embed của chính nguồn đó, giữ nguyên chỗ đang xem.
@@ -647,7 +681,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         // -> window.open không bị chặn, trang phim bị quảng cáo đá đi mất.
         await _c!.evaluateJavascript(source: kAntiAdUserScript);
         await _c!.evaluateJavascript(source: kPlayerBridgeScript);
-        await _c!.evaluateJavascript(source: kAutoPlayScript);
+        if (!_khongTuPhat) await _c!.evaluateJavascript(source: kAutoPlayScript);
         return; // nhịp sau đọc được ngay
       }
       final r = await _c!.evaluateJavascript(source: _kReadStateJs);
@@ -934,6 +968,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// Nạp một tập: ưu tiên link m3u8 (player native), không có thì trang embed.
   void _loadEpisode(Episode ep, double startAt) {
     _pageLoadedOnce = false; // trang mới, cho phép nó tự chuyển hướng lúc đầu
+    _nativeRetries = 0;
+    _stallT?.cancel();
     if (_canNative(ep)) {
       if (!_native) setState(() => _native = true);
       _openNative(ep.m3u8, startAt);
@@ -1428,7 +1464,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     net: (window.__vfNet || []).slice(0, 8),
     // --- player có ĐI LẤY dữ liệu không, và có NẠP được vào không ---
     req: window.__vfReq || null,
-    mse: window.__vfMse || null
+    mse: window.__vfMse || null,
+    // --- WebKit: từng SourceBuffer nạp gì / bị gỡ khi nào, và AI gọi load()/gỡ ---
+    SB: window.__vfSB || null,
+    who: window.__vfWho || null
   });
 })()
 ''';
@@ -1466,6 +1505,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       ));
     }
   }
+
+  /// iPad + trang nguonc: KHÔNG ép tự phát.
+  ///
+  /// Script tự-phát dội `play()` mỗi 600ms. Trên WebKit, jwplayer đáp lại lệnh
+  /// play() không kèm cử chỉ thật bằng `prime()` -> `video.load()`, mà hls.js ở
+  /// đó gắn MediaSource qua thẻ <source> nên `load()` đá MediaSource ra ngoài
+  /// -> "đang tải" mãi (stack trace đo trên WebKit thật). Safari phát được vì
+  /// người dùng chỉ chạm Play một lần. Nên trên iPad để người xem tự chạm.
+  bool get _khongTuPhat => Platform.isIOS && RefererGate.needsGate(_url);
 
   /// Máy dùng CHUỘT. Chỉ những máy này mới bấm-vào-phim-để-tạm-dừng được trên
   /// trang nhúng; máy cảm ứng cần chạm thẳng vào nút của trang.
@@ -1532,6 +1580,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 ),
                 // Tự phát: tiêm vào CẢ các iframe (player thường nằm trong iframe
                 // khác miền -> JS ở trang ngoài không với tới được).
+                if (!_khongTuPhat)
                 UserScript(
                   source: kAutoPlayScript,
                   injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
@@ -1611,7 +1660,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   setState(() => _webError = null); // tải lại được rồi
                 }
                 try { await c.evaluateJavascript(source: kPlayerBridgeScript); } catch (_) {}
-                try { await c.evaluateJavascript(source: kAutoPlayScript); } catch (_) {}
+                if (!_khongTuPhat) { try { await c.evaluateJavascript(source: kAutoPlayScript); } catch (_) {} }
                 _syncState();
               },
             );

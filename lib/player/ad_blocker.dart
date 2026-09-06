@@ -309,6 +309,65 @@ const String kAntiAdUserScript = r'''
       window.__vfReq = { n: 0, cuoi: '' };
     } catch (e) {}
 
+    // -1d) CHỈ WEBKIT (iPad): chặn `video.load()` khi MediaSource đang mở, và
+    //      ghi lại SourceBuffer bị nạp/gỡ ra sao + ai gọi load()/gỡ.
+    //
+    //      Đo trên WebKit thật: hls.js gắn ManagedMediaSource qua thẻ <source>,
+    //      rồi jwplayer `prime()` (đáp lại play() không kèm cử chỉ) gọi
+    //      `video.load()` -> media element bị đặt lại -> MediaSource rớt ->
+    //      SourceBuffer bị gỡ -> "đang tải" mãi. Chromium gắn bằng src=blob: nên
+    //      sống qua load(); chỉ WebKit dính, nên chỉ vá ở WebKit.
+    try {
+      if (/Apple/.test(navigator.vendor || '')) {
+        window.__vfMsObjs = window.__vfMsObjs || [];
+        ['MediaSource', 'ManagedMediaSource'].forEach(function (k) {
+          var O = window[k]; if (!O || O.__vfWrapped) return;
+          var P = function () { var o = new O(); window.__vfMsObjs.push(o); return o; };
+          P.prototype = O.prototype; P.isTypeSupported = O.isTypeSupported && O.isTypeSupported.bind(O);
+          P.__vfWrapped = 1; window[k] = P;
+        });
+        window.__vfWho = [];
+        var ai = function (tag) {
+          try {
+            var st = String(new Error().stack || '').split(String.fromCharCode(10)).slice(1, 5)
+              .map(function (l) { return l.trim().replace(/^at /, '').replace(/https?:\/\/[^/]+\//g, '').slice(0, 60); }).join(' < ');
+            if (window.__vfWho.length < 10) window.__vfWho.push(tag + ' | ' + st);
+          } catch (e) {}
+        };
+        var ol = HTMLMediaElement.prototype.load;
+        HTMLMediaElement.prototype.load = function () {
+          var dangMo = false;
+          try { dangMo = window.__vfMsObjs.some(function (m) { return m.readyState === 'open'; }); } catch (e) {}
+          ai(dangMo ? 'CHAN load() (MediaSource dang open)' : 'load()');
+          if (dangMo) return; // giữ MediaSource sống
+          return ol.apply(this, arguments);
+        };
+        var SBp = window.SourceBuffer && window.SourceBuffer.prototype;
+        if (SBp) {
+          window.__vfSB = [];
+          var oa = SBp.appendBuffer;
+          SBp.appendBuffer = function (b) {
+            var rec = this.__vfRec;
+            if (!rec) {
+              rec = this.__vfRec = { n: window.__vfSB.length, appends: 0, updateend: 0, loi: [], buffered: '' };
+              window.__vfSB.push(rec);
+              var sb = this;
+              sb.addEventListener('updateend', function () { rec.updateend++; try { var r = []; for (var i = 0; i < sb.buffered.length; i++) r.push(sb.buffered.start(i).toFixed(1) + '-' + sb.buffered.end(i).toFixed(1)); rec.buffered = r.join(',') || '(rong)'; } catch (e) { rec.buffered = 'da bi go'; } });
+              sb.addEventListener('error', function () { rec.loi.push('error'); });
+              sb.addEventListener('abort', function () { rec.loi.push('abort'); });
+            }
+            rec.appends++;
+            return oa.apply(this, arguments);
+          };
+          var ob = SBp.abort; if (ob) SBp.abort = function () { ai('SB.abort'); return ob.apply(this, arguments); };
+        }
+        [window.MediaSource, window.ManagedMediaSource].forEach(function (C) {
+          var Pp = C && C.prototype; if (!Pp || !Pp.removeSourceBuffer || Pp.__vfRs) return; Pp.__vfRs = 1;
+          var orm = Pp.removeSourceBuffer; Pp.removeSourceBuffer = function () { ai('removeSourceBuffer'); return orm.apply(this, arguments); };
+        });
+      }
+    } catch (e) {}
+
     // -1) GOM LỖI JS của trang. Console của trang bị bịt ở phần dưới (để qua
     //     mặt bộ dò devtool), nên khi trang phát hỏng thì không còn đường nào
     //     biết vì sao. Gom vào đây rồi app đọc ra bằng evaluateJavascript.
