@@ -434,12 +434,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       if (cleaned != null && mounted && _native) {
         toPlay = cleaned.url;
         _adsSkipped = cleaned.removedSeconds;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: kRed,
-          duration: const Duration(seconds: 3),
-          content: Text('Đã cắt ${_adsSkipped.round()} giây quảng cáo '
-              'chèn trong phim'),
-        ));
+        // Không hiện thông báo — người xem đã than dòng đỏ dưới màn hình gây
+        // chối mắt mỗi lần mở phim. Số liệu vẫn có trong nhật ký ở trên.
       }
     } catch (e) {
       vlog('ads', 'loi khi loc quang cao: $e');
@@ -530,9 +526,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _resumeTo = keep;
     _resumeApplied = keep <= 2;
     _resumeTries = 0;
+    // Báo nhẹ, không đỏ: người xem không thích dòng đỏ dưới màn hình. Nhưng vẫn
+    // phải báo — vì trang nguồn có quảng cáo, không nói thì tưởng app tự nhồi.
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      backgroundColor: kRed,
-      content: Text('Link phát trực tiếp lỗi — chuyển sang trang nguồn'),
+      backgroundColor: kSurface,
+      duration: Duration(seconds: 4),
+      content: Text('Link phát trực tiếp lỗi — đang chuyển sang trang của nguồn (có thể kèm quảng cáo)',
+          style: TextStyle(color: Colors.white70)),
     ));
   }
 
