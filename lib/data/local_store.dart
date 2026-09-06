@@ -129,21 +129,16 @@ class LocalStore {
   Set<String> get disabledSources =>
       (_p.getStringList(_kSrcOff) ?? const <String>[]).toSet();
 
-  /// Đặt MẶC ĐỊNH theo nền tảng, CHỈ một lần cho mỗi máy.
+  /// Đặt MẶC ĐỊNH nguồn theo nền tảng, CHỈ một lần cho mỗi máy.
   ///
-  /// iOS: tắt sẵn nguonc. Trang phát của nguonc không chạy trong WebView của
-  /// iPad — đo trên chính WebKit của Apple: dữ liệu tải về đủ nhưng player của
-  /// họ gắn ManagedMediaSource xong không tạo nổi SourceBuffer nên đứng ở
-  /// "đang tải" mãi. Safari thật cũng vậy, nên không sửa được từ app.
-  ///
-  /// Chỉ là MẶC ĐỊNH: người dùng vẫn bật lại được trong Cài đặt, và lựa chọn đó
-  /// được tôn trọng vì cờ này chặn không cho ghi đè lần sau.
+  /// Hiện KHÔNG tắt sẵn nguồn nào. Bản 1.0.51 từng tắt sẵn nguonc trên iOS vì
+  /// tưởng trang phát của nó không chạy được trong WebView iPad; thực ra là do
+  /// script tự-phát của app dội play() làm jwplayer đá MediaSource ra (đã sửa
+  /// ở 1.0.54/1.0.55). Máy đã bị tắt sẵn từ 1.0.51 thì giữ nguyên lựa chọn —
+  /// người dùng bật lại trong Cài đặt, không tự ý đảo lại.
   Future<void> seedDefaultSourcesOnce() async {
     if (_p.getBool(_kSrcSeeded) == true) return;
     await _p.setBool(_kSrcSeeded, true);
-    if (!Platform.isIOS) return;
-    final off = disabledSources..add(kSrcNguonc);
-    await _p.setStringList(_kSrcOff, off.toList());
   }
 
   Future<void> setSourceEnabled(String id, bool on) async {

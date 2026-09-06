@@ -681,7 +681,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         // -> window.open không bị chặn, trang phim bị quảng cáo đá đi mất.
         await _c!.evaluateJavascript(source: kAntiAdUserScript);
         await _c!.evaluateJavascript(source: kPlayerBridgeScript);
-        if (!_khongTuPhat) await _c!.evaluateJavascript(source: kAutoPlayScript);
+        await _c!.evaluateJavascript(source: _khongTuPhat ? kGentleAutoPlayScript : kAutoPlayScript);
         return; // nhịp sau đọc được ngay
       }
       final r = await _c!.evaluateJavascript(source: _kReadStateJs);
@@ -1506,7 +1506,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
-  /// iPad + trang nguonc: KHÔNG ép tự phát.
+  /// iPad + trang nguonc: dùng tự-phát NHẸ TAY ([kGentleAutoPlayScript]).
   ///
   /// Script tự-phát dội `play()` mỗi 600ms. Trên WebKit, jwplayer đáp lại lệnh
   /// play() không kèm cử chỉ thật bằng `prime()` -> `video.load()`, mà hls.js ở
@@ -1580,9 +1580,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 ),
                 // Tự phát: tiêm vào CẢ các iframe (player thường nằm trong iframe
                 // khác miền -> JS ở trang ngoài không với tới được).
-                if (!_khongTuPhat)
                 UserScript(
-                  source: kAutoPlayScript,
+                  source: _khongTuPhat ? kGentleAutoPlayScript : kAutoPlayScript,
                   injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
                   forMainFrameOnly: false,
                 ),
@@ -1660,7 +1659,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   setState(() => _webError = null); // tải lại được rồi
                 }
                 try { await c.evaluateJavascript(source: kPlayerBridgeScript); } catch (_) {}
-                if (!_khongTuPhat) { try { await c.evaluateJavascript(source: kAutoPlayScript); } catch (_) {} }
+                try { await c.evaluateJavascript(source: _khongTuPhat ? kGentleAutoPlayScript : kAutoPlayScript); } catch (_) {}
                 _syncState();
               },
             );

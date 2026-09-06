@@ -102,6 +102,49 @@ List<ContentBlocker> adContentBlockers() {
 /// JS chạy SAU khi trang tải xong: tự động phát video (remote trên TV khó "bấm"
 /// nút play trong trang web). Thử gọi video.play() và bấm nút play của các player
 /// phổ biến (jwplayer/video.js/plyr...) trong ~15s vì player khởi tạo bất đồng bộ.
+/// Tự phát NHẸ TAY cho iPad + trang nguonc — thay cho [kAutoPlayScript].
+///
+/// [kAutoPlayScript] dội `play()` mỗi 600ms và bấm giả vào player. Trên WebKit,
+/// jwplayer đáp lại play() không kèm cử chỉ bằng `prime()` -> `video.load()`,
+/// mà hls.js ở đó gắn MediaSource qua thẻ <source> nên load() đá nó ra ngoài ->
+/// "đang tải" mãi. Bỏ hẳn script đó thì phim chạy, nhưng phải chạm Play một lần.
+///
+/// Ở đây: đợi jwplayer dựng xong (có thẻ video, trạng thái idle/paused), gọi
+/// `play()` ĐÚNG MỘT LẦN; chưa chạy thì 4 giây sau thử thêm MỘT lần bằng
+/// video.play(); rồi thôi, để nút Play của trang cho người xem. Kèm lớp chặn
+/// load() lúc MediaSource đang mở (trong kAntiAdUserScript) để đỡ cú prime().
+const String kGentleAutoPlayScript = r'''
+(function () {
+  if (window.__vfGentle) return;
+  window.__vfGentle = 1;
+  var lan = 0, n = 0;
+  function playing() {
+    try { var v = document.querySelector('video'); return v && !v.paused && v.currentTime > 0; } catch (e) { return false; }
+  }
+  function san() {
+    try {
+      if (typeof window.jwplayer !== 'function') return false;
+      var st = window.jwplayer().getState();
+      return !!document.querySelector('video') && (st === 'idle' || st === 'paused' || st === 'complete');
+    } catch (e) { return false; }
+  }
+  var t = setInterval(function () {
+    n++;
+    if (window.__vfUserPaused || playing() || n > 60) { clearInterval(t); return; }
+    if (!san()) return;
+    lan++;
+    try { console.log('VIEFLIX_DBG gentle-play lan ' + lan); } catch (e) {}
+    try {
+      if (lan === 1) { window.jwplayer().play(true); }
+      else { var v = document.querySelector('video'); if (v) { var p = v.play(); if (p && p.catch) p.catch(function () {}); } }
+    } catch (e) {}
+    if (lan >= 2) { clearInterval(t); return; }
+    // đợi 4 giây (8 nhịp 500ms) trước lần thử tiếp
+    n = Math.max(n, 52);
+  }, 500);
+})();
+''';
+
 const String kAutoPlayScript = r'''
 (function () {
   // CHỐNG CHẠY LẶP. Script này được tiêm nhiều lần (onLoadStop, và nhịp tự lành
