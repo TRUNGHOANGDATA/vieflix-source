@@ -32,7 +32,7 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
   // `debugger` (bộ làm rối của player.js/ads.js và devtool-guard đều rải nó qua
   // Function("debugger")) làm trang DỪNG THẬT -> tưởng là treo. Trên máy thật
   // không có inspector nên vô hại; đây thuần là nhiễu của harness.
-  if (!process.env.KEEP_DEBUGGER) await page.addInitScript(() => {
+  if (process.env.STRIP_DEBUGGER) await page.addInitScript(() => { // MẶC ĐỊNH TẮT: bật lên là bộ làm rối tự vệ quay vòng, treo mọi run
     const strip = (x) => (typeof x === 'string' ? x.replace(/debugger/g, '/*dbg*/') : x);
     const OF = Function;
     const F = function () { return OF.apply(this, Array.prototype.map.call(arguments, strip)); };
