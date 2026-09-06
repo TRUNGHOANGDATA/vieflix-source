@@ -28,6 +28,18 @@ setTimeout(() => { console.log('  == het gio cung, thoat =='); process.exit(0); 
   const ctx = await browser.newContext({ userAgent: UA, viewport: { width: 1280, height: 720 } });
   const page = await ctx.newPage();
   const log = (s) => { console.log(s); };
+  // Vô hiệu lệnh `debugger`: Playwright điều khiển WebKit qua Web Inspector, nên
+  // `debugger` (bộ làm rối của player.js/ads.js và devtool-guard đều rải nó qua
+  // Function("debugger")) làm trang DỪNG THẬT -> tưởng là treo. Trên máy thật
+  // không có inspector nên vô hại; đây thuần là nhiễu của harness.
+  if (!process.env.KEEP_DEBUGGER) await page.addInitScript(() => {
+    const strip = (x) => (typeof x === 'string' ? x.replace(/debugger/g, '/*dbg*/') : x);
+    const OF = Function;
+    const F = function () { return OF.apply(this, Array.prototype.map.call(arguments, strip)); };
+    F.prototype = OF.prototype; OF.prototype.constructor = F; window.Function = F;
+    const OE = window.eval; window.eval = (x) => OE(strip(x));
+    try { const gen = Object.getPrototypeOf(function*(){}).constructor; const GF = function () { return gen.apply(this, Array.prototype.map.call(arguments, strip)); }; GF.prototype = gen.prototype; gen.prototype.constructor = GF; } catch (e) {}
+  });
   // Giữ console GỐC trước khi script chống-devtool bịt nó, rồi mở lại đúng 5 hàm
   // log/debug/info/warn/error (table/clear/dir vẫn câm để lừa bộ dò Performance).
   // Nhờ đó đọc được logger của hls.js ở luồng chính.
