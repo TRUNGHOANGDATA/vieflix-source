@@ -253,9 +253,21 @@ const String kAutoPlayScript = r'''
 })();
 ''';
 
-/// JS tiêm sớm (document start): chặn popup, ẩn overlay, VÀ chặn quảng cáo
-/// VAST pre-roll bằng cách xoá cấu hình `advertising` khỏi jwplayer.setup(),
-/// kèm tự bấm "Bỏ qua quảng cáo" làm phương án dự phòng.
+/// JS tiêm sớm (document start): trả window.open GIẢ để nguồn tưởng popup mở
+/// được (không thì nó khoá player), vô hiệu bộ dò devtool, và tự bấm/tua qua
+/// quảng cáo pre-roll.
+///
+/// KHÔNG ẩn phần tử theo class "quảng cáo" — và test khoá lại điều đó. Vì sao:
+/// guard-messages-r25.js của nguồn (nguonc/streamc.xyz) dò chặn-quảng-cáo bằng
+/// "mồi" — nó chèn hai div VÔ HÌNH ngoài màn (left:-10000px, 2x2px,
+/// display:block) mang đúng các class quảng cáo phổ biến:
+///     probe("adsbox pub_300x250 text-ad ad_container")
+///     probe("adsbygoogle ad-banner ad-placement ad_leaderboard")
+/// rồi đo hidden(el) = computed display 'none' | visibility 'hidden' | rect<1px,
+/// ba lần. Mồi bị ẩn 3/3 -> nó kết luận có chặn QC, TẠM DỪNG phim và trùm bảng
+/// "Thông báo phát video". CSS cũ ẩn '.adsbox' và '[class*="banner"]' (khớp
+/// 'ad-banner') chính là thứ đá trúng mồi. Ẩn theo class không thể tách "mồi"
+/// khỏi "quảng cáo thật" (cùng tên class) nên là ngõ cụt — đã bỏ hẳn.
 const String kAntiAdUserScript = r'''
 (function () {
   try {
@@ -556,11 +568,12 @@ const String kAntiAdUserScript = r'''
     //     ("Lỗi khởi tạo player"). Đường tự-phát đã có kAutoPlayScript lo, nên
     //     bỏ hẳn lớp can thiệp này để không phá player của nguồn.
 
-    // 3) Ẩn overlay/banner QC + cho video full khung
+    // 3) Chỉ cho video tràn khung. KHÔNG ẩn phần tử theo class quảng cáo nữa:
+    //    nguồn dùng chính việc đó làm BẪY dò chặn QC (xem doc của biến này ở
+    //    trên). Popup/điều hướng cướp trang đã có window.open giả + chặn điều
+    //    hướng lo, không cần CSS.
     var css = document.createElement('style');
     css.innerHTML = [
-      '#_wau, ._wau, .ad, .ads, .adsbox, [id^="ad_"], [class*="popup"],',
-      '[class*="overlay-ad"], [class*="banner"], iframe[src*="ads"] { display:none !important; }',
       'html, body { overflow:hidden !important; background:#000 !important; }',
       'video, .jwplayer, #player { width:100vw !important; height:100vh !important; }'
     ].join('\n');

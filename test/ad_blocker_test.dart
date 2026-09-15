@@ -121,6 +121,19 @@ void main() {
       // config setup của nó làm nó init hỏng ("Lỗi khởi tạo player").
       expect(kAntiAdUserScript.contains('new Proxy'), isFalse);
     });
+
+    test('KHÔNG ẩn phần tử theo class quảng cáo (đó là bẫy dò chặn QC của nguồn)', () {
+      // guard-messages của streamc.xyz chèn div mồi vô hình mang class
+      // 'adsbox ... ad_container' và 'adsbygoogle ad-banner ...' rồi đo xem có bị
+      // ẩn không. Ẩn '.adsbox'/'[class*="banner"]' -> nó tưởng có adblock -> TẠM
+      // DỪNG phim + trùm bảng "Thông báo phát video". Không được ẩn theo class nữa.
+      expect(kAntiAdUserScript.contains('adsbox'), isFalse,
+          reason: 'ẩn .adsbox khớp mồi 1 của guard -> đá dừng phim');
+      expect(kAntiAdUserScript.contains('[class*="banner"]'), isFalse,
+          reason: 'ẩn [class*=banner] khớp "ad-banner" của mồi 2 -> đá dừng phim');
+      expect(kAntiAdUserScript.contains('display:none'), isFalse,
+          reason: 'không còn ẩn phần tử nào bằng display:none trong lớp chống QC');
+    });
   });
 
   group('vô hiệu disable-devtool (devtool-guard)', () {
