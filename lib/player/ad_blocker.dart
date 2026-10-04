@@ -481,6 +481,46 @@ const String kAntiAdUserScript = r'''
         void ce;
       }
     } catch (e) {}
+    // -0b) SỬA CẤU HÌNH PHÁT CỦA NGUONC (bản r25 của streamc.xyz) NGAY KHI NÓ
+    //      ĐƯỢC ĐỌC. Trang giải mã cấu hình bằng JSON.parse, ghi lại vào thẻ
+    //      #stream-bootstrap, rồi guard-messages / player-messages lại
+    //      JSON.parse thẻ đó — nên móc JSON.parse là bắt được mọi lần đọc:
+    //        tvc.enabled      -> quảng cáo video đầu phim (VAST qua jwplayer,
+    //                            nút "Bỏ qua" bấm không ăn). player-messages bỏ
+    //                            hẳn quảng cáo khi enabled !== true.
+    //        ads.enabled      -> ads.js (popup quảng cáo).
+    //        browserGuard.*   -> dò DevTools (đá sang devtools_redirect_url) và
+    //                            dò chặn-QC (adblock_action 'pause' -> dừng phim).
+    //                            detect_devtools = false thì guard còn tự xoá khoá
+    //                            phiên đã lỡ ghi vào sessionStorage.
+    //      Chỉ đụng object đúng hình dạng cấu hình đó (có nonce + bootstrap).
+    try {
+      if (!JSON.__vfWrapped) {
+        var oParse = JSON.parse;
+        var vaCauHinh = function (o) {
+          try {
+            if (!o || typeof o !== 'object' || typeof o.nonce !== 'string' ||
+                typeof o.bootstrap !== 'string') return;
+            if (o.tvc && typeof o.tvc === 'object') o.tvc.enabled = false;
+            if (o.ads && typeof o.ads === 'object') o.ads.enabled = false;
+            var g = o.browserGuard;
+            if (g && typeof g === 'object') {
+              g.detect_devtools = false;
+              g.anti_adblock = false;
+              g.block_shortcuts = false;
+              g.block_context_menu = false;
+            }
+          } catch (e) {}
+        };
+        JSON.parse = function parse(text, reviver) {
+          var o = oParse.apply(this, arguments);
+          vaCauHinh(o);
+          return o;
+        };
+        JSON.__vfWrapped = 1;
+      }
+    } catch (e) {}
+
     // 0) VÔ HIỆU "disable-devtool" (devtool-guard.bundle.js của streamc.xyz).
     //    Log thật cho thấy nó bắn 'You don't have permission to use DEVTOOL type=6'
     //    rồi HUỶ/TẢI LẠI trang liên tục -> player không bao giờ dựng được.
@@ -512,7 +552,12 @@ const String kAntiAdUserScript = r'''
       if (_c) {
         var _log = _c.log ? _c.log.bind(_c) : function () {};
         var noop = function () {};
-        ['table','clear','dir','dirxml','profile','profileEnd','group',
+        // 'debug': guard-messages-r25 của nguonc gọi console.debug(regex, Error)
+        // có GÀI getter ở toString/stack. Plugin WebView2 bật CDP Runtime.enable
+        // để nghe console, nên mỗi lần gọi là getter bị đọc -> nó tưởng DevTools
+        // đang mở -> khoá phiên rồi đá sang phim.nguonc.com (bảng "Không mở được
+        // trang phát", lỗi CONNECTION_ABORTED). No-op thì không ai đọc getter.
+        ['debug','table','clear','dir','dirxml','profile','profileEnd','group',
          'groupCollapsed','groupEnd','count','countReset','trace','time',
          'timeEnd','timeLog'].forEach(function (k) { try { _c[k] = noop; } catch (e) {} });
         _c.log = function () {

@@ -144,6 +144,20 @@ void main() {
       expect(kAntiAdUserScript, contains('DEVTOOL'));
     });
 
+    test('console.debug là no-op (bẫy getter Error.stack của guard-messages-r25)', () {
+      // WebView2 bật CDP Runtime.enable -> đối số console.debug bị đọc stack ->
+      // guard tưởng DevTools mở -> đá sang phim.nguonc.com.
+      expect(kAntiAdUserScript, contains("['debug',"));
+    });
+
+    test('móc JSON.parse tắt quảng cáo tvc, ads và bộ dò của browserGuard', () {
+      expect(kAntiAdUserScript, contains('JSON.parse = function parse'));
+      expect(kAntiAdUserScript, contains('o.tvc.enabled = false'));
+      expect(kAntiAdUserScript, contains('o.ads.enabled = false'));
+      expect(kAntiAdUserScript, contains('g.detect_devtools = false'));
+      expect(kAntiAdUserScript, contains('g.anti_adblock = false'));
+    });
+
     test('vẫn cho VFKEY và VIEFLIX_DBG đi qua console.log', () {
       expect(kAntiAdUserScript, contains('VFKEY:'));
       expect(kAntiAdUserScript, contains('VIEFLIX_DBG'));

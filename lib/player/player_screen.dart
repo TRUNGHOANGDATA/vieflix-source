@@ -198,6 +198,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// khung chính là chuyện bình thường của trang; sau mốc này là quảng cáo cướp.
   bool _pageLoadedOnce = false;
 
+  /// Lúc app vừa HUỶ một cú điều hướng khung chính (quảng cáo cướp trang).
+  /// WebView2 đáp lại việc huỷ bằng lỗi CONNECTION_ABORTED gắn vào CHÍNH trang
+  /// đang xem — trang vẫn còn nguyên, không được tính là trang hỏng.
+  DateTime _lastHijackCancel = DateTime.fromMillisecondsSinceEpoch(0);
+
   /// Trang của nguồn tải hỏng (chỉ tính khung chính). Có giá trị thì hiện bảng
   /// báo lỗi thay vì để người xem ngồi nhìn màn hình đen không biết chuyện gì.
   String? _webError;
@@ -938,6 +943,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     //
     // Giá phải trả: đổi tập chậm hơn chút vì WebView dựng lại từ đầu.
     _navSeq++;
+    // WebView mới -> trang mới: cho phép nó tự chuyển hướng lúc đầu (cổng
+    // Referer -> trang phim). Không xoá cờ này thì nút "Thử lại" bị luật chặn
+    // cướp trang chặn nhầm chính trang cổng -> lỗi CONNECTION_ABORTED mãi.
+    _pageLoadedOnce = false;
     if (mounted) setState(() => _navUrl = null);
     final nav = await RefererGate.urlFor(url);
     if (!mounted || _url != url) return; // đã đổi tập/nguồn trong lúc chờ
@@ -958,6 +967,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       if (!RefererGate.isGateUrl(_lastNavStart)) return; // đã sang trang phim
       vlog('embed', 'cong khong dan sang trang phim sau 8s -> nap thang $target');
       _navSeq++;
+      _pageLoadedOnce = false;
       setState(() => _navUrl = target);
     });
   }
@@ -1595,14 +1605,21 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 vlog('webview', 'LOI TAI TRANG ${req.url}: ${err.type} ${err.description}');
                 // Chỉ báo khi hỏng CHÍNH trang phim; ảnh/quảng cáo lỗi lặt vặt
                 // thì kệ, phim vẫn chạy được.
-                if (req.isForMainFrame == true && mounted) {
-                  setState(() => _webError = err.description);
+                if (req.isForMainFrame != true || !mounted) return;
+                // Lỗi do CHÍNH app huỷ cú cướp trang (xem _lastHijackCancel):
+                // trang phim vẫn đang ở đó, đừng trùm bảng lỗi lên.
+                if (DateTime.now().difference(_lastHijackCancel) <
+                    const Duration(seconds: 2)) {
+                  return;
                 }
+                setState(() => _webError = err.description);
               },
               onReceivedHttpError: (c, req, resp) =>
                   vlog('webview', 'HTTP ${resp.statusCode} khi tai ${req.url}'),
               shouldOverrideUrlLoading: (c, action) async {
                 final u = action.request.url?.toString() ?? '';
+                // Trang cổng Referer là của chính app, không bao giờ là quảng cáo.
+                if (RefererGate.isGateUrl(u)) return NavigationActionPolicy.ALLOW;
                 if (isAdUrl(u)) return NavigationActionPolicy.CANCEL;
                 // Quảng cáo cướp cả khung chính để đá sang trang khác (hay gặp
                 // nhất là trang cờ bạc, rồi nhà mạng chặn và trả về trang cảnh
@@ -1614,6 +1631,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   pageLoadedOnce: _pageLoadedOnce,
                 )) {
                   vlog('webview', 'CHAN quang cao cuop trang -> $u');
+                  _lastHijackCancel = DateTime.now();
                   return NavigationActionPolicy.CANCEL;
                 }
                 return NavigationActionPolicy.ALLOW;
