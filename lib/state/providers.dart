@@ -53,6 +53,11 @@ Iterable<T> onlyEnabledSources<T>(
 /// Tăng giá trị này để buộc Trang chủ vẽ lại (sau khi xoá mục Xem tiếp...).
 final homeRefreshProvider = StateProvider<int>((ref) => 0);
 
+/// Tab đang mở trên thanh menu (0 Trang chủ, 1 Đang xem, 2 Thư viện, 3 Yêu
+/// thích, 4 Cài đặt). Để ở provider vì trang chủ cũng cần chuyển tab (thẻ "Xem
+/// tiếp danh sách của bạn", ô tìm kiếm trên menu).
+final navTabProvider = StateProvider<int>((ref) => 0);
+
 /// TV: người dùng ĐANG gõ trong ô tìm ở màn Thư viện hay không.
 /// Shell đọc cờ này để: bấm Back khi đang gõ thì chỉ THOÁT ô gõ (bỏ focus bàn
 /// phím), KHÔNG nhảy về Trang chủ.

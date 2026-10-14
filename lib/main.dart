@@ -8,6 +8,7 @@ import 'data/movie_source.dart';
 import 'state/providers.dart';
 import 'theme/app_theme.dart';
 import 'screens/shell.dart';
+import 'widgets/tv_focusable.dart';
 
 /// Môi trường WebView2 dùng chung (chỉ Windows). Cho phép video TỰ PHÁT
 /// không cần cú bấm của người dùng — WebView2 mặc định chặn autoplay.
@@ -60,6 +61,9 @@ class MyApp extends StatelessWidget {
       title: 'VieFlix',
       debugShowCheckedModeBanner: false,
       theme: appTheme,
+      // Chính sách focus chung: remote ▲▼◀▶ cuộn MỘT cú mượt (xem tvRequestFocus).
+      // Bọc quanh Navigator nên mọi màn hình + hộp thoại đều thừa hưởng.
+      builder: (context, child) => FocusTraversalGroup(policy: tvFocusPolicy, child: child!),
       home: const AppShell(),
     );
   }

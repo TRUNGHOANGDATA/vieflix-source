@@ -12,6 +12,16 @@ class Movie {
     required this.totalEpisodes, this.year = '', this.genres = const [],
   });
 
+  /// Ảnh NGANG (cho băng phim nổi bật, thẻ "Tiếp tục xem").
+  /// ⚠️ Hai nguồn đặt NGƯỢC nhau (đo 10/2026): phimapi `thumb_url` ngang 780x439,
+  /// `poster_url` dọc; nguonc `thumb_url` dọc 356x503, `poster_url` ngang 1280x720.
+  /// Slug phimapi mang tiền tố 'pa:' (kPhimApiPrefix).
+  String get wideUrl {
+    final pa = slug.startsWith('pa:');
+    final first = pa ? thumbUrl : posterUrl;
+    return first.isNotEmpty ? first : (pa ? posterUrl : thumbUrl);
+  }
+
   // Loại tiếng suy ra từ trường `language` (vd "Vietsub + Thuyết Minh")
   bool get hasThuyetMinh {
     final l = language.toLowerCase();

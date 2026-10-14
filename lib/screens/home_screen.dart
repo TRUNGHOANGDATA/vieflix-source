@@ -6,6 +6,7 @@ import '../state/providers.dart';
 import '../widgets/movie_row.dart';
 import '../widgets/paginated_movie_row.dart';
 import '../widgets/top_ranked_row.dart';
+import '../widgets/home_hero.dart';
 import '../widgets/tv_focusable.dart';
 import '../theme/app_theme.dart';
 import '../data/local_store.dart';
@@ -31,7 +32,7 @@ class ContinueCard extends ConsumerWidget {
     final d = ref.watch(detailProvider(progress.slug));
     return d.maybeWhen(
       data: (det) {
-        final img = det.posterUrl.isNotEmpty ? det.posterUrl : det.thumbUrl;
+        final img = det.base.wideUrl; // thẻ ngang -> lấy đúng ảnh ngang của từng nguồn
         final avail = det.servers.isNotEmpty ? det.servers.first.items.length : 0;
         final total = det.base.totalEpisodes > avail ? det.base.totalEpisodes : (avail > 0 ? avail : det.base.totalEpisodes);
         final sub = total > 1 ? '${_epText(progress.episodeName)} / $total' : 'Xem tiếp';
@@ -98,38 +99,47 @@ class ContinueCard extends ConsumerWidget {
       );
 
   Widget _card(BuildContext context, WidgetRef ref, String img, String name, String sub, String slug, String openName) {
-    // Hàng "Xem tiếp": KHÔNG hiện ô preview lớn (bấm là xem luôn), chỉ sáng
-    // viền khi được chọn để dùng được bằng remote.
+    final hasPos = progress.durationSeconds > 0 && progress.positionSeconds > 0;
+    final frac = hasPos ? (progress.positionSeconds / progress.durationSeconds).clamp(0.0, 1.0) : 0.0;
+    final left = hasPos ? ((progress.durationSeconds - progress.positionSeconds) / 60).ceil() : 0;
+    // Thẻ NGANG theo mẫu thiết kế 10/2026: ảnh ngang, nút play + "Còn x phút",
+    // thanh tiến độ đỏ, tên + tập + phần trăm. Bấm là xem luôn (không ô preview),
+    // chỉ sáng viền khi được chọn để dùng được bằng remote.
     final card = FocusHighlight(
       onPressed: () => onOpen(slug, openName),
-      scale: 1.04,
+      scale: 1.03,
       builder: (f) => Container(
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: f ? kRed : Colors.transparent, width: 3),
-          boxShadow: f ? [BoxShadow(color: kRed.withValues(alpha: 0.6), blurRadius: 16)] : null,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: f ? kRed : Colors.white12, width: f ? 3 : 1),
+          boxShadow: [
+            // TV box yếu: bóng mờ dưới MỌI thẻ phải vẽ lại mỗi khung hình lúc cuộn -> bỏ trên Android.
+            if (!Platform.isAndroid) BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 12, offset: const Offset(0, 6)),
+            if (f) BoxShadow(color: kRed.withValues(alpha: 0.6), blurRadius: 16),
+          ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(11),
           child: Stack(fit: StackFit.expand, children: [
             if (img.isNotEmpty)
-              CachedNetworkImage(imageUrl: img, fit: BoxFit.cover, memCacheWidth: 400, maxWidthDiskCache: 400, errorWidget: (c, _, __) => Container(color: kSurface))
+              CachedNetworkImage(imageUrl: img, fit: BoxFit.cover, alignment: Alignment.topCenter,
+                  memCacheWidth: 600, maxWidthDiskCache: 600,
+                  errorWidget: (c, _, _) => Container(color: kSurface))
             else
               Container(color: kSurface, child: const Icon(Icons.movie, color: Colors.white24, size: 40)),
             // Lớp tối dưới đáy để chữ trắng luôn đọc rõ
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.center,
-                    colors: [Colors.black, Colors.transparent]),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                    colors: [Color(0xF0000000), Color(0x66000000), Colors.transparent], stops: [0.0, 0.5, 0.9]),
               ),
             ),
-            const Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 42)),
             // Nút ✕ ở góc: chỉ dành cho chuột (bản PC). Trên TV dùng nút
             // "Bỏ theo dõi" ở dưới thẻ vì remote không trỏ được vào đây.
             if (!Platform.isAndroid)
               Positioned(
-                top: 4, right: 4,
+                top: 6, right: 6,
                 child: GestureDetector(
                   onTap: () => _remove(ref),
                   child: Container(
@@ -139,28 +149,44 @@ class ContinueCard extends ConsumerWidget {
                   ),
                 ),
               ),
-            // Tên + tập (chữ trắng hết)
             Positioned(
-              left: 8, right: 8, bottom: 10,
+              left: 12, right: 12, bottom: 10,
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(name, maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                Row(children: [
+                  Container(
+                    width: 38, height: 38,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: f ? kRed : Colors.black38,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                  ),
+                  if (left > 0) ...[
+                    const SizedBox(width: 10),
+                    Text('Còn $left phút', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  ],
+                ]),
+                const SizedBox(height: 8),
+                if (hasPos)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(value: frac, minHeight: 3, backgroundColor: Colors.white24, color: kRed),
+                  ),
+                const SizedBox(height: 8),
+                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
                 const SizedBox(height: 2),
-                Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 12)),
+                Row(children: [
+                  Expanded(
+                    child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                  ),
+                  if (hasPos)
+                    Text('${(frac * 100).round()}%', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ]),
               ]),
             ),
-            // Thanh tiến độ đã xem trong tập (nếu có ghi vị trí)
-            if (progress.durationSeconds > 0 && progress.positionSeconds > 0)
-              Positioned(
-                left: 0, right: 0, bottom: 0,
-                child: LinearProgressIndicator(
-                  value: (progress.positionSeconds / progress.durationSeconds).clamp(0.0, 1.0),
-                  minHeight: 3,
-                  backgroundColor: Colors.white24,
-                  color: kRed,
-                ),
-              ),
           ]),
         ),
       ),
@@ -184,13 +210,14 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(homeRefreshProvider); // vẽ lại khi xoá mục Xem tiếp
     return ListView(padding: EdgeInsets.zero, children: [
-      const SizedBox(height: 8),
+      const HomeHero(),
       const TopSeriesRow(),
       _continueRow(ref, context),
       _personalRow(ref, context),
       _recommendedRow(ref, context),
       PaginatedMovieRow(
         title: 'Mới cập nhật',
+        icon: Icons.auto_awesome,
         query: const BrowseQuery('all', ''),
         onTap: (m) => _open(context, m.slug, m.name),
         onSeeMore: () => _seeMore(context, 'Phim mới cập nhật', const BrowseQuery('all', '')),
@@ -220,17 +247,15 @@ class HomeScreen extends ConsumerWidget {
             ref.watch(enabledSourcesProvider), (p) => p.slug)
         .toList();
     if (cw.isEmpty) return const SizedBox.shrink();
+    void toWatching() => ref.read(navTabProvider.notifier).state = 1; // tab "Đang xem"
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Padding(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-        child: Text('Xem tiếp', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-      ),
+      RowHeader(title: 'Tiếp tục xem', icon: Icons.history_rounded, onSeeMore: toWatching, edgeRight: 50),
       LayoutBuilder(builder: (ctx, cons) {
         // Chia vừa khít số thẻ nguyên -> thẻ cuối không chạm mép, không bị cắt.
-        // TV cần cao thêm để chứa nút "Bỏ theo dõi" dưới mỗi thẻ.
+        // Thẻ ngang (~16:8). TV cần cao thêm để chứa nút "Bỏ theo dõi" dưới mỗi thẻ.
         final m = rowMetricsFor(cons.maxWidth,
-            target: 210, gap: 12, heightFactor: 1.5,
-            extraHeight: Platform.isAndroid ? 44 : 10);
+            target: 310, gap: 12, heightFactor: 0.5,
+            extraHeight: Platform.isAndroid ? 52 : 8);
         return SizedBox(
           height: m.rowHeight,
           // Lề nằm NGOÀI vùng cuộn -> thẻ thừa bị cắt hẳn, không lòi nửa ảnh.
@@ -240,11 +265,17 @@ class HomeScreen extends ConsumerWidget {
               scrollDirection: Axis.horizontal,
               physics: SnapScrollPhysics(itemExtent: m.extent),
               itemExtent: m.extent,
-              itemCount: cw.length,
-              itemBuilder: (c, i) => ContinueCard(
-                progress: cw[i],
-                onOpen: (slug, name) => _open(context, slug, name),
-              ),
+              // Thẻ cuối: lối sang tab "Đang xem" (giống mẫu thiết kế).
+              itemCount: cw.length + 1,
+              itemBuilder: (c, i) => i < cw.length
+                  ? ContinueCard(
+                      progress: cw[i],
+                      onOpen: (slug, name) => _open(context, slug, name),
+                    )
+                  : Padding(
+                      padding: EdgeInsets.only(bottom: Platform.isAndroid ? 44 : 0),
+                      child: _AllWatchingCard(onTap: toWatching),
+                    ),
             ),
           ),
         );
@@ -261,7 +292,8 @@ class HomeScreen extends ConsumerWidget {
       data: (res) => res == null
           ? const SizedBox.shrink()
           : MovieRow(
-              title: '🎯 Vì bạn hay xem ${res.$1}',
+              title: 'Vì bạn hay xem ${res.$1}',
+              icon: Icons.track_changes,
               movies: res.$3,
               onTap: (m) => _open(c, m.slug, m.name),
               // Xem tất cả -> mở đúng thể loại đang được gợi ý
@@ -278,7 +310,8 @@ class HomeScreen extends ConsumerWidget {
         if (list.isEmpty) return const SizedBox.shrink();
         final all = list.map((e) => e.$1).toList();
         return MovieRow(
-          title: '⭐ Phim đề cử (điểm cao)',
+          title: 'Phim đề cử (điểm cao)',
+          icon: Icons.star_rounded,
           movies: all.take(12).toList(),
           onTap: (m) => _open(c, m.slug, m.name),
           // Danh sách này do app tự chấm điểm -> mở trang lưới danh sách có sẵn
@@ -312,5 +345,36 @@ class HomeScreen extends ConsumerWidget {
         query: BrowseQuery('country', slug),
         onTap: (m) => _open(c, m.slug, m.name),
         onSeeMore: () => _seeMore(c, title, BrowseQuery('country', slug)),
+      );
+}
+
+/// Thẻ cuối hàng "Tiếp tục xem": mở tab "Đang xem" (toàn bộ phim xem dở).
+class _AllWatchingCard extends StatelessWidget {
+  final VoidCallback onTap;
+  const _AllWatchingCard({required this.onTap});
+  @override
+  Widget build(BuildContext context) => FocusHighlight(
+        onPressed: onTap,
+        scale: 1.03,
+        builder: (f) => Container(
+          margin: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: f ? 0.1 : 0.04),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: f ? kRed : Colors.white12, width: f ? 3 : 1),
+          ),
+          child: Row(children: [
+            const Expanded(
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.add_circle_outline, color: Colors.white70, size: 34),
+                SizedBox(height: 8),
+                Text('Xem tiếp\ndanh sách của bạn',
+                    textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 13.5, height: 1.4)),
+              ]),
+            ),
+            Icon(Icons.chevron_right, color: f ? Colors.white : Colors.white38),
+            const SizedBox(width: 8),
+          ]),
+        ),
       );
 }

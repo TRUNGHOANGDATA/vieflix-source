@@ -18,6 +18,15 @@ void main() {
     expect(m.quality, 'HD');
   });
 
+  test('Movie.wideUrl lấy đúng ảnh ngang theo nguồn (hai nguồn đặt ngược nhau)', () {
+    Movie mk(String slug, {String t = 'T', String p = 'P'}) => Movie.fromJson(
+        {'name': 'x', 'slug': slug, 'thumb_url': t, 'poster_url': p});
+    expect(mk('pa:abc').wideUrl, 'T'); // phimapi: thumb ngang
+    expect(mk('abc').wideUrl, 'P'); // nguonc: poster ngang
+    expect(mk('pa:abc', t: '').wideUrl, 'P'); // thiếu thì lùi về ảnh còn lại
+    expect(mk('abc', p: '').wideUrl, 'T');
+  });
+
   test('MovieDetail.fromJson bóc category thành genres/countries/year và servers', () {
     final d = MovieDetail.fromJson({
       'name': 'Phim A', 'slug': 'phim-a',

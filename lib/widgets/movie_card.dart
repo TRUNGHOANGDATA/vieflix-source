@@ -37,16 +37,6 @@ class _HoverPreviewState extends ConsumerState<HoverPreview> {
   bool _focused = false; // được chọn bằng remote (D-pad)
   Rect _rect = Rect.zero;
 
-  void _ensureVisible() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = _key.currentContext;
-      if (ctx != null && ctx.mounted) {
-        Scrollable.ensureVisible(ctx,
-            alignment: 0.5, duration: const Duration(milliseconds: 220), curve: Curves.easeOut);
-      }
-    });
-  }
-
   @override
   void dispose() {
     _showT?.cancel();
@@ -94,9 +84,9 @@ class _HoverPreviewState extends ConsumerState<HoverPreview> {
             return null;
           }),
         },
+        // Cuộn tới thẻ do tvRequestFocus lo (xem tv_focusable.dart).
         onShowFocusHighlight: (f) {
           if (f != _focused) setState(() => _focused = f);
-          if (f) _ensureVisible();
         },
         child: MouseRegion(
           onEnter: (_) => _enter(),
@@ -206,6 +196,7 @@ class MovieCard extends StatelessWidget {
   /// (Việt + tên gốc) và số tập nằm BÊN DƯỚI. Chọn/hover: viền đỏ + quầng sáng +
   /// tên đổi màu đỏ (KHÔNG phóng to trên TV để khỏi phá layout).
   Widget _card(bool hovering) {
+    if (rank != null) return _rankCard(hovering, rank!);
     final m = movie;
     final img = m.thumbUrl.isNotEmpty ? m.thumbUrl : m.posterUrl;
     final pills = _langPills(m);
@@ -220,7 +211,8 @@ class MovieCard extends StatelessWidget {
             // Khung VÀNG GOLD khi chọn/hover + bóng đổ nổi khối (luôn có) + quầng vàng khi chọn.
             border: Border.all(color: hovering ? kAmber : Colors.white12, width: hovering ? 3 : 1),
             boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 12, offset: const Offset(0, 6)),
+              // TV box yếu: bóng mờ dưới MỌI thẻ phải vẽ lại mỗi khung hình lúc cuộn -> bỏ trên Android.
+              if (!Platform.isAndroid) BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 12, offset: const Offset(0, 6)),
               if (hovering) BoxShadow(color: kAmber.withValues(alpha: 0.55), blurRadius: 22, spreadRadius: 1),
             ],
           ),
@@ -295,21 +287,109 @@ class MovieCard extends StatelessWidget {
     ]);
   }
 
-  // Số thứ tự VÀNG nghiêng, viền đen — đặt cạnh tên phim (dùng cho hàng Top).
-  Widget _rankNumber(int n) {
+  /// Thẻ hàng Top (theo mẫu thiết kế 10/2026): mọi thông tin nằm ĐÈ lên ảnh —
+  /// nhãn "TOP n" đỏ góc phải, số thứ tự vàng to góc trái-dưới, cạnh đó là tên,
+  /// pill tập + chất lượng, dòng phụ. Không có phần chữ bên dưới như thẻ thường.
+  Widget _rankCard(bool hovering, int n) {
+    final m = movie;
+    final img = m.thumbUrl.isNotEmpty ? m.thumbUrl : m.posterUrl;
+    final ep = episodeLabel(m);
+    // Danh sách từ nguồn thường không kèm thể loại -> lùi về tên gốc.
+    final sub = m.genres.isNotEmpty ? m.genres.take(2).join(' · ') : m.originalName;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: hovering ? kRed : Colors.white12, width: hovering ? 3 : 1),
+        boxShadow: [
+          // TV box yếu: bóng mờ dưới MỌI thẻ phải vẽ lại mỗi khung hình lúc cuộn -> bỏ trên Android.
+          if (!Platform.isAndroid) BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 12, offset: const Offset(0, 6)),
+          if (hovering) BoxShadow(color: kRed.withValues(alpha: 0.55), blurRadius: 22, spreadRadius: 1),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(11),
+        child: Stack(fit: StackFit.expand, children: [
+          CachedNetworkImage(
+            imageUrl: img, fit: BoxFit.cover, alignment: Alignment.topCenter,
+            memCacheWidth: 400, maxWidthDiskCache: 400,
+            placeholder: (c, _) => Container(color: kSurface),
+            errorWidget: (c, _, _) => Container(color: kSurface, child: const Icon(Icons.movie, color: Colors.white24)),
+          ),
+          // Nửa dưới tối dần để chữ trắng luôn đọc rõ trên mọi poster.
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                colors: [Color(0xF2000000), Color(0x99000000), Colors.transparent],
+                stops: [0.0, 0.32, 0.62],
+              ),
+            ),
+          ),
+          Positioned(
+            top: 8, right: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(gradient: kRedGradient, borderRadius: BorderRadius.circular(5)),
+              child: Text('TOP $n',
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.3)),
+            ),
+          ),
+          Positioned(
+            left: 8, right: 8, bottom: 8,
+            child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              _rankNumber(n, size: 46),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  Text(m.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: hovering ? kRedHot : Colors.white, fontSize: 13.5, fontWeight: FontWeight.w700, height: 1.2)),
+                  const SizedBox(height: 5),
+                  Wrap(spacing: 5, runSpacing: 4, children: [
+                    if (ep.isNotEmpty) _miniPill(ep),
+                    if (m.quality.isNotEmpty) _miniPill(m.quality),
+                  ]),
+                  if (sub.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                  ],
+                ]),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _miniPill(String s) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Text(s, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+      );
+
+  // Số thứ tự VÀNG nghiêng, viền đen — dùng cho hàng Top.
+  Widget _rankNumber(int n, {double size = 38}) {
     final s = '$n';
     return Stack(children: [
       Text(s,
           style: TextStyle(
-            fontSize: 38, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, height: 1.0,
+            fontSize: size, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, height: 1.0,
             foreground: Paint()
               ..style = PaintingStyle.stroke
               ..strokeWidth = 3
               ..color = Colors.black,
           )),
       Text(s,
-          style: const TextStyle(
-            fontSize: 38, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, height: 1.0, color: kAmber,
+          style: TextStyle(
+            fontSize: size, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, height: 1.0, color: kAmber,
           )),
     ]);
   }

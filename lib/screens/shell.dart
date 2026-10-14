@@ -18,16 +18,17 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
-  int _i = 0;
   bool _updateDismissed = false;
 
   @override
   Widget build(BuildContext context) {
     const pages = [HomeScreen(), WatchingScreen(), BrowseScreen(), MyListScreen(), SettingsScreen()];
     final info = ref.watch(updateProvider).maybeWhen(data: (u) => u, orElse: () => null);
+    final i = ref.watch(navTabProvider);
+    void go(int v) => ref.read(navTabProvider.notifier).state = v;
     return PopScope(
       // Ở Trang chủ: nút Back thoát app. Ở tab khác: Back quay về Trang chủ trước.
-      canPop: _i == 0,
+      canPop: i == 0,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // Đang gõ tìm phim -> Back chỉ THOÁT ô gõ, không nhảy về Trang chủ.
@@ -35,13 +36,21 @@ class _AppShellState extends ConsumerState<AppShell> {
           ref.read(searchTypingProvider.notifier).state = false;
           return;
         }
-        if (_i != 0) setState(() => _i = 0);
+        if (i != 0) go(0);
       },
       child: Scaffold(
-        body: Column(children: [
-          TopNav(selected: _i, onSelect: (v) => setState(() => _i = v)),
-          if (info != null && !_updateDismissed) _updateBanner(info),
-          Expanded(child: pages[_i]),
+        body: Stack(children: [
+          // Ảnh nền điện ảnh phủ mờ: chỉ để tạo không khí, lớp tối dày phía trên
+          // giữ chữ/thẻ phim đọc rõ. cacheWidth giới hạn bộ nhớ trên TV box yếu.
+          Positioned.fill(
+            child: Image.asset('assets/images/app_bg.jpg',
+                fit: BoxFit.cover, cacheWidth: 1280, color: kBg.withValues(alpha: 0.72), colorBlendMode: BlendMode.srcOver),
+          ),
+          Column(children: [
+            TopNav(selected: i, onSelect: go),
+            if (info != null && !_updateDismissed) _updateBanner(info),
+            Expanded(child: pages[i]),
+          ]),
         ]),
       ),
     );

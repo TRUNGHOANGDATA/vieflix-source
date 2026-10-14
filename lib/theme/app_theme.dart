@@ -1,15 +1,19 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 
-const kBg = Color(0xFF191B24);      // nền xám xanh — ĐÚNG màu RoPhim
-const kSurface = Color(0xFF23252F);
+// Bảng màu theo mẫu thiết kế 10/2026: nền xanh-tím rất tối cho hợp ảnh nền điện
+// ảnh đỏ/tím (assets/images/app_bg.jpg), thay cho xám xanh kiểu RoPhim cũ.
+const kBg = Color(0xFF0E0D16);
+const kSurface = Color(0xFF1C1B27);
 const kRed = Color(0xFFE50914);
+const kRedHot = Color(0xFFFF2D55);  // đầu sáng của dải đỏ trên nút chính
 const kAmber = Color(0xFFF5C518);   // vàng IMDb / số thứ tự Top
 
-/// Font đóng gói trong app (assets/fonts). Chữ THƯƠNG HIỆU (logo, logo góc khi
-/// xem phim) phải ghim vào font này thay vì để theo theme: theme dùng Segoe UI
-/// trên Windows nên nếu không ghim, logo sẽ ra hai kiểu chữ khác nhau giữa PC và
-/// TV. Chữ giao diện thường thì vẫn để theo theme như cũ.
+/// Dải đỏ cho nút "Xem ngay" / huy hiệu TOP.
+const kRedGradient = LinearGradient(colors: [kRedHot, kRed]);
+
+/// Font đóng gói trong app (assets/fonts), dùng cho TOÀN BỘ chữ trên mọi nền
+/// tảng (trước 10/2026 Windows dùng Segoe UI hệ thống). Logo vẫn ghim thẳng tên
+/// font này để không lệ thuộc theme.
 const kBrandFont = 'Be Vietnam Pro';
 
 final appTheme = ThemeData(
@@ -19,8 +23,8 @@ final appTheme = ThemeData(
     primary: kRed,
     surface: kSurface,
   ),
-  // Windows: dùng Segoe UI hệ thống. Android (TV): dùng Be Vietnam Pro đóng gói sẵn.
-  fontFamily: Platform.isWindows ? 'Segoe UI' : 'Be Vietnam Pro',
+  // Mọi nền tảng cùng một font đóng gói -> PC, TV, iPad nhìn y hệt nhau.
+  fontFamily: kBrandFont,
   useMaterial3: true,
   elevatedButtonTheme: ElevatedButtonThemeData(
     style: ElevatedButton.styleFrom(

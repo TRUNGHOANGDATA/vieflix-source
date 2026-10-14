@@ -11,12 +11,14 @@ import 'tv_focusable.dart';
 /// Hàng phim ngang TỰ TẢI THÊM khi cuộn sang phải (dùng lại browseProvider).
 class PaginatedMovieRow extends ConsumerStatefulWidget {
   final String title;
+  final IconData? icon;
   final BrowseQuery query;
   final void Function(Movie) onTap;
   final VoidCallback? onSeeMore;
   const PaginatedMovieRow({
     super.key,
     required this.title,
+    this.icon,
     required this.query,
     required this.onTap,
     this.onSeeMore,
@@ -58,7 +60,7 @@ class _PaginatedMovieRowState extends ConsumerState<PaginatedMovieRow> {
     }
     final hasMore = st.page < st.totalPage;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      RowHeader(title: widget.title, onSeeMore: widget.onSeeMore, edgeRight: 50),
+      RowHeader(title: widget.title, icon: widget.icon, onSeeMore: widget.onSeeMore, edgeRight: 50),
       LayoutBuilder(builder: (ctx, cons) {
         final m = rowMetricsFor(cons.maxWidth);
         return SizedBox(

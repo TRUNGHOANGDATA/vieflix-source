@@ -8,13 +8,14 @@ import 'movie_card.dart';
 import 'movie_row.dart' show ScrollArrow, RowHeader, SnapScrollPhysics, rowMetricsFor;
 import 'shimmer.dart';
 
-/// Hàng "Top ... hôm nay": số thứ tự VÀNG cỡ lớn nằm bên trái mỗi poster
-/// (kiểu bảng xếp hạng của RoPhim). Bấm số/poster để mở chi tiết.
+/// Hàng "Top ... hôm nay": thẻ có nhãn "TOP n" đỏ + số thứ tự VÀNG cỡ lớn đè
+/// lên poster (xem MovieCard._rankCard). Bấm thẻ để mở chi tiết.
 class TopRankedRow extends ConsumerStatefulWidget {
   final String title;
+  final IconData? icon;
   final FutureProvider<List<Movie>> provider;
   final VoidCallback? onSeeMore;
-  const TopRankedRow({super.key, required this.title, required this.provider, this.onSeeMore});
+  const TopRankedRow({super.key, required this.title, this.icon, required this.provider, this.onSeeMore});
   @override
   ConsumerState<TopRankedRow> createState() => _TopRankedRowState();
 }
@@ -38,10 +39,11 @@ class _TopRankedRowState extends ConsumerState<TopRankedRow> {
       data: (list) {
         if (list.isEmpty) return const SizedBox.shrink();
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          RowHeader(title: widget.title, onSeeMore: widget.onSeeMore, edgeRight: 50),
+          RowHeader(title: widget.title, icon: widget.icon, onSeeMore: widget.onSeeMore, edgeRight: 50),
           LayoutBuilder(builder: (ctx, cons) {
-            // Chia vừa khít như hàng thường; số thứ tự nằm TRONG thẻ (cạnh tên).
-            final m = rowMetricsFor(cons.maxWidth);
+            // Chia vừa khít như hàng thường. Thẻ Top để chữ ĐÈ lên ảnh nên thấp
+            // hơn thẻ thường (không cần chừa chỗ chữ bên dưới).
+            final m = rowMetricsFor(cons.maxWidth, target: 230, heightFactor: 1.2, extraHeight: 8);
             return SizedBox(
               height: m.rowHeight,
               child: Stack(children: [
@@ -76,7 +78,8 @@ class TopSeriesRow extends StatelessWidget {
   const TopSeriesRow({super.key});
   @override
   Widget build(BuildContext context) => TopRankedRow(
-        title: '🔥 Top 30 Phim Bộ hôm nay',
+        title: 'Top thịnh hành hôm nay',
+        icon: Icons.local_fire_department_rounded,
         provider: topSeriesProvider,
         onSeeMore: () => Navigator.of(context).push(MaterialPageRoute(
             builder: (_) => const CategoryListScreen(title: 'Phim Bộ', query: BrowseQuery('type', 'phim-bo')))),

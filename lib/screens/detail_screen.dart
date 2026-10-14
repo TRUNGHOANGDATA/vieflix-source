@@ -18,13 +18,16 @@ import 'category_list_screen.dart';
 
 class DetailScreen extends ConsumerStatefulWidget {
   final String slug, title;
-  const DetailScreen({super.key, required this.slug, required this.title});
+  /// Mở xong là phát luôn (nút "Xem ngay" ở băng phim nổi bật trang chủ).
+  final bool autoPlay;
+  const DetailScreen({super.key, required this.slug, required this.title, this.autoPlay = false});
   @override
   ConsumerState<DetailScreen> createState() => _DetailScreenState();
 }
 
 class _DetailScreenState extends ConsumerState<DetailScreen> {
   int? _userServer; // null = chưa chọn -> dùng mặc định (ưu tiên Thuyết minh)
+  bool _autoPlayed = false; // autoPlay chỉ chạy MỘT lần, quay lại từ player không phát nữa
 
   @override
   void initState() {
@@ -147,6 +150,13 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     final hasServer = servers.isNotEmpty;
     final srv = hasServer ? _effServer(servers) : 0;
     final eps = hasServer ? _sorted(servers[srv].episodes) : <Episode>[];
+    if (widget.autoPlay && !_autoPlayed && eps.isNotEmpty) {
+      _autoPlayed = true;
+      // Sau khung hình: không được push màn mới ngay trong build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _playSmart(d, servers[srv], eps, servers, srv);
+      });
+    }
     return ListView(padding: EdgeInsets.zero, children: [
       // Header điện ảnh: ảnh nền lớn + lớp mờ, poster & thông tin nổi lên trên.
       Stack(children: [

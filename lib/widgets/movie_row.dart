@@ -157,14 +157,15 @@ class SeeAllButton extends StatelessWidget {
         scale: 1.0,
         builder: (f) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          // Mẫu thiết kế: chữ đỏ trơn, không viền. Viền/nền đỏ chỉ hiện khi remote chọn tới.
           decoration: BoxDecoration(
             color: f ? kRed : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: f ? kRed : Colors.white24, width: 2),
+            border: Border.all(color: f ? kRed : Colors.transparent, width: 2),
           ),
-          child: Text('Xem tất cả ›',
+          child: Text('Xem tất cả  ›',
               style: TextStyle(
-                  color: f ? Colors.white : kRed, fontSize: 14, fontWeight: FontWeight.w600)),
+                  color: f ? Colors.white : kRed, fontSize: 13.5, fontWeight: FontWeight.w600)),
         ),
       );
 }
@@ -172,13 +173,31 @@ class SeeAllButton extends StatelessWidget {
 /// Tiêu đề hàng phim (bấm vào tên cũng mở "Xem tất cả").
 class RowHeader extends StatelessWidget {
   final String title;
+  final IconData? icon; // biểu tượng đỏ trước tên hàng (theo mẫu thiết kế)
   final VoidCallback? onSeeMore;
   final double edgeLeft, edgeRight;
-  const RowHeader({super.key, required this.title, this.onSeeMore, this.edgeLeft = 16, this.edgeRight = 16});
+  const RowHeader({super.key, required this.title, this.icon, this.onSeeMore, this.edgeLeft = 16, this.edgeRight = 16});
   @override
   Widget build(BuildContext context) => Padding(
-        padding: EdgeInsets.fromLTRB(edgeLeft, 16, edgeRight, 8),
+        padding: EdgeInsets.fromLTRB(edgeLeft, 18, edgeRight, 10),
         child: Row(children: [
+          if (icon != null) ...[
+            // Ô vuông bo góc dải đỏ + icon trắng + quầng sáng nhẹ: icon đỏ trơn
+            // trên nền tối nhìn nhỏ và chìm.
+            Container(
+              width: 32, height: 32,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  colors: [Color(0xFFFF6A3D), kRedHot, kRed],
+                ),
+                borderRadius: BorderRadius.circular(9),
+                boxShadow: [BoxShadow(color: kRed.withValues(alpha: 0.45), blurRadius: 12, offset: const Offset(0, 3))],
+              ),
+              child: Icon(icon, color: Colors.white, size: 19),
+            ),
+            const SizedBox(width: 12),
+          ],
           Expanded(
             child: GestureDetector(
               onTap: onSeeMore,
@@ -194,12 +213,14 @@ class RowHeader extends StatelessWidget {
 
 class MovieRow extends StatefulWidget {
   final String title;
+  final IconData? icon;
   final List<Movie> movies;
   final void Function(Movie) onTap;
   final VoidCallback? onSeeMore;
   const MovieRow({
     super.key,
     required this.title,
+    this.icon,
     required this.movies,
     required this.onTap,
     this.onSeeMore,
@@ -222,7 +243,7 @@ class _MovieRowState extends State<MovieRow> {
     if (widget.movies.isEmpty) return const SizedBox.shrink();
     final extra = widget.onSeeMore != null ? 1 : 0;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      RowHeader(title: widget.title, onSeeMore: widget.onSeeMore, edgeRight: 50),
+      RowHeader(title: widget.title, icon: widget.icon, onSeeMore: widget.onSeeMore, edgeRight: 50),
       LayoutBuilder(builder: (ctx, cons) {
         final m = rowMetricsFor(cons.maxWidth);
         return SizedBox(

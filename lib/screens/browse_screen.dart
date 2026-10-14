@@ -116,7 +116,10 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
     // nhiều trang (BrowseNotifier tải 3 trang/lượt) nên lọc ra đủ phim.
     final browsing = !_filter.isEmpty || _langs.isNotEmpty;
 
+    // Nhóm focus riêng nhưng VẪN dùng chính sách chung (tvFocusPolicy) để
+    // remote cuộn mượt như các màn khác.
     return FocusTraversalGroup(
+      policy: tvFocusPolicy,
       child: Column(children: [
         // Ô TÌM + 4 Ô LỌC CHUNG MỘT HÀNG. Trước đây mỗi thứ một hàng riêng, cộng
         // hàng loại tiếng nữa thì khối lọc ăn ~180px, mà màn 1080p chỉ còn ~890px
@@ -295,6 +298,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
 
   // Chưa gõ + chưa lọc: hàng gợi ý phim cho đỡ trống.
   Widget _suggestHub() => FocusTraversalGroup(
+        policy: tvFocusPolicy,
         child: ListView(
             padding: EdgeInsets.only(top: 2, bottom: Platform.isAndroid ? 44 : 24),
             children: [

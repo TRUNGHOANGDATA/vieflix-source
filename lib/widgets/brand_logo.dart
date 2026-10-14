@@ -18,7 +18,7 @@ class BrandLogo extends StatelessWidget {
   Widget build(BuildContext context) {
     final mark = height;
     final word = TextStyle(
-      fontFamily: kBrandFont, // ghim: theme dùng Segoe UI trên Windows
+      fontFamily: kBrandFont, // ghim thẳng, không lệ thuộc theme
       fontSize: height * 0.72,
       fontWeight: FontWeight.w700,
       // Bản cũ dùng -0.5px cố định làm các chữ dính vào nhau ở cỡ nhỏ.

@@ -79,6 +79,11 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Ảnh nền điện ảnh sau các tab chính. Đổi từ PNG 1,7MB sang JPG ~120KB cho APK
+  # TV đỡ phình.
+  assets:
+    - assets/images/app_bg.jpg
+
   fonts:
     - family: Be Vietnam Pro
       fonts:

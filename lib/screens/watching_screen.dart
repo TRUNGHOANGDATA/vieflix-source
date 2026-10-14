@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../state/providers.dart';
@@ -28,8 +29,10 @@ class WatchingScreen extends ConsumerWidget {
       Expanded(
         child: GridView.builder(
           padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 200, childAspectRatio: 0.62, crossAxisSpacing: 8, mainAxisSpacing: 8),
+          // ContinueCard là thẻ NGANG; TV cao thêm 44 cho nút "Bỏ theo dõi" dưới thẻ.
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 360, mainAxisExtent: Platform.isAndroid ? 214 : 170,
+              crossAxisSpacing: 8, mainAxisSpacing: 8),
           itemCount: cw.length,
           itemBuilder: (c, i) => ContinueCard(
             progress: cw[i],
