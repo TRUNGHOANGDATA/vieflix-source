@@ -16,6 +16,30 @@ import '../widgets/tv_focusable.dart';
 import '../player/player_screen.dart';
 import 'category_list_screen.dart';
 
+/// Số tập mỗi khoảng khi phim quá nhiều tập (Running Man ~1700 tập: dựng 1700
+/// nút một lúc vừa cuộn mỏi tay trên remote, vừa nặng cho TV box yếu).
+const kEpisodesPerPage = 100;
+
+/// Chia danh sách tập (đã sắp xếp) thành các khoảng [kEpisodesPerPage] tập.
+/// Nhãn lấy theo SỐ TẬP thật ở hai đầu khoảng ("1–100", "1601–1700"); tên tập
+/// không có số thì lùi về thứ tự trong danh sách.
+List<({int start, int end, String label})> episodePages(List<Episode> eps,
+    {int size = kEpisodesPerPage}) {
+  int? num(String s) {
+    final m = RegExp(r'\d+').firstMatch(s);
+    return m == null ? null : int.tryParse(m.group(0)!);
+  }
+
+  final pages = <({int start, int end, String label})>[];
+  for (var start = 0; start < eps.length; start += size) {
+    final end = (start + size).clamp(0, eps.length); // không gồm end
+    final a = num(eps[start].name) ?? start + 1;
+    final b = num(eps[end - 1].name) ?? end;
+    pages.add((start: start, end: end, label: a == b ? '$a' : '$a–$b'));
+  }
+  return pages;
+}
+
 class DetailScreen extends ConsumerStatefulWidget {
   final String slug, title;
   /// Mở xong là phát luôn (nút "Xem ngay" ở băng phim nổi bật trang chủ).
@@ -28,6 +52,7 @@ class DetailScreen extends ConsumerStatefulWidget {
 class _DetailScreenState extends ConsumerState<DetailScreen> {
   int? _userServer; // null = chưa chọn -> dùng mặc định (ưu tiên Thuyết minh)
   bool _autoPlayed = false; // autoPlay chỉ chạy MỘT lần, quay lại từ player không phát nữa
+  int? _userEpPage; // khoảng tập đang chọn; null = khoảng chứa tập đang xem dở
 
   @override
   void initState() {
@@ -244,7 +269,11 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
               for (int i = 0; i < servers.length; i++)
                 FocusHighlight(
                   scale: 1.0,
-                  onPressed: () => setState(() => _userServer = i),
+                  // Đổi nguồn thì số tập khác -> về lại khoảng mặc định.
+                  onPressed: () => setState(() {
+                    _userServer = i;
+                    _userEpPage = null;
+                  }),
                   builder: (f) => Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
@@ -287,10 +316,56 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
               ]);
             }),
             const SizedBox(height: 12),
-            // Lưới tập đều nhau, đã sắp xếp theo số thứ tự.
-            // FocusHighlight: remote chọn rõ (viền vàng) + TỰ CUỘN tới khi lên/xuống.
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final ep in eps)
+            ..._episodeGrid(d, servers, srv, eps),
+          ] else
+            const Text('Phim chưa có nguồn phát.', style: TextStyle(color: Colors.white54)),
+        ]),
+      ),
+      if (d.genres.isNotEmpty) _similar(d),
+      const SizedBox(height: 30),
+    ]);
+  }
+
+  /// Lưới tập; phim hơn [kEpisodesPerPage] tập thì có thêm hàng chọn khoảng
+  /// ("1–100", "101–200"…) và chỉ dựng nút cho khoảng đang chọn.
+  List<Widget> _episodeGrid(MovieDetail d, List<StreamSource> servers, int srv, List<Episode> eps) {
+    final pages = episodePages(eps);
+    var page = 0;
+    if (pages.length > 1) {
+      // Mặc định mở đúng khoảng chứa tập đang xem dở.
+      final p = ref.read(storeProvider).progressFor(d.slug);
+      final cur = p == null ? -1 : eps.indexWhere((e) => e.slug == p.episodeSlug);
+      page = (_userEpPage ?? (cur < 0 ? 0 : cur ~/ kEpisodesPerPage)).clamp(0, pages.length - 1);
+    }
+    final shown = pages.isEmpty ? eps : eps.sublist(pages[page].start, pages[page].end);
+    return [
+      if (pages.length > 1) ...[
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (int i = 0; i < pages.length; i++)
+            FocusHighlight(
+              scale: 1.0,
+              onPressed: () => setState(() => _userEpPage = i),
+              builder: (f) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(
+                  color: i == page ? Colors.white : kSurface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: f ? kAmber : Colors.white10, width: 2),
+                ),
+                child: Text(pages[i].label,
+                    style: TextStyle(
+                        color: i == page ? Colors.black : Colors.white,
+                        fontSize: 13,
+                        fontWeight: i == page ? FontWeight.bold : FontWeight.normal)),
+              ),
+            ),
+        ]),
+        const SizedBox(height: 12),
+      ],
+      // Lưới tập đều nhau, đã sắp xếp theo số thứ tự.
+      // FocusHighlight: remote chọn rõ (viền vàng).
+      Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final ep in shown)
                 SizedBox(
                   width: 72,
                   child: FocusHighlight(
@@ -317,13 +392,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                   ),
                 ),
             ]),
-          ] else
-            const Text('Phim chưa có nguồn phát.', style: TextStyle(color: Colors.white54)),
-        ]),
-      ),
-      if (d.genres.isNotEmpty) _similar(d),
-      const SizedBox(height: 30),
-    ]);
+    ];
   }
 
   Widget _ratingLine(MovieDetail d) {
