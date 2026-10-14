@@ -45,6 +45,22 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('mở từ ô tìm trên menu (cờ đang gõ bật sẵn) -> con trỏ vào thẳng ô gõ',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1706, 889));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final container = ProviderContainer(overrides: [apiProvider.overrideWithValue(_FakeApi())]);
+    addTearDown(container.dispose);
+    container.read(searchTypingProvider.notifier).state = true;
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: Scaffold(body: BrowseScreen())),
+    ));
+    await tester.pumpAndSettle();
+    final field = tester.widget<TextField>(find.byType(TextField).first);
+    expect(field.focusNode?.hasFocus, isTrue);
+  });
+
   testWidgets('ô tìm và 4 ô lọc nằm CHUNG MỘT HÀNG (không phải hai hàng)',
       (tester) async {
     await pumpBrowse(tester);

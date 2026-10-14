@@ -30,7 +30,8 @@ const kLibraryTab = 2;
 class TopNav extends StatelessWidget {
   final int selected;
   final ValueChanged<int> onSelect;
-  const TopNav({super.key, required this.selected, required this.onSelect});
+  final VoidCallback onSearch; // ô tìm kiếm: sang Thư viện + đặt sẵn con trỏ vào ô gõ
+  const TopNav({super.key, required this.selected, required this.onSelect, required this.onSearch});
 
   @override
   Widget build(BuildContext context) {
@@ -73,10 +74,11 @@ class TopNav extends StatelessWidget {
     );
   }
 
-  /// Ô tìm kiếm: chỉ là lối tắt sang tab Thư viện phim (ô gõ thật nằm ở đó, có
-  /// sẵn bộ lọc + tìm bằng giọng nói trên TV).
+  /// Ô tìm kiếm: lối tắt sang tab Thư viện phim (ô gõ thật nằm ở đó, có sẵn bộ
+  /// lọc + tìm bằng giọng nói trên TV). Bấm là con trỏ vào thẳng ô gõ — bản
+  /// 1.0.58 chỉ đổi tab nên người dùng tưởng ô này không tìm được.
   Widget _search(bool wide) => FocusHighlight(
-        onPressed: () => onSelect(kLibraryTab),
+        onPressed: onSearch,
         scale: 1.0,
         builder: (f) => Container(
           width: wide ? 300 : null,

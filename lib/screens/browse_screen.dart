@@ -42,6 +42,11 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   void initState() {
     super.initState();
     _typingCtl = ref.read(searchTypingProvider.notifier);
+    // Mở từ ô tìm trên thanh menu: cờ "đang gõ" đã bật TRƯỚC khi màn này dựng
+    // nên ref.listen bên dưới không bắt được -> tự đưa con trỏ vào ô gõ ở đây.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && ref.read(searchTypingProvider)) _fieldFocus.requestFocus();
+    });
     _scroll.addListener(() {
       if (_scroll.hasClients &&
           _scroll.position.pixels > _scroll.position.maxScrollExtent - 400) {

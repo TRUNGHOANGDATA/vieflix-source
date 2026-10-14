@@ -47,7 +47,16 @@ class _AppShellState extends ConsumerState<AppShell> {
                 fit: BoxFit.cover, cacheWidth: 1280, color: kBg.withValues(alpha: 0.72), colorBlendMode: BlendMode.srcOver),
           ),
           Column(children: [
-            TopNav(selected: i, onSelect: go),
+            TopNav(
+              selected: i,
+              onSelect: go,
+              // Bật cờ "đang gõ": màn Thư viện thấy cờ thì đưa con trỏ vào ô tìm
+              // (cùng đường với nút Tìm trên TV -> TV hiện luôn bàn phím ảo).
+              onSearch: () {
+                go(kLibraryTab);
+                ref.read(searchTypingProvider.notifier).state = true;
+              },
+            ),
             if (info != null && !_updateDismissed) _updateBanner(info),
             Expanded(child: pages[i]),
           ]),
