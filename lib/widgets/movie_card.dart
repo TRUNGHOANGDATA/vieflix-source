@@ -237,6 +237,23 @@ class MovieCard extends StatelessWidget {
               ),
               if (pills.isNotEmpty)
                 Positioned(left: 8, right: 8, bottom: 8, child: Row(children: pills)),
+              // Nhãn chất lượng góc phải-trên (FHD vàng / HD xám) theo mẫu thiết kế.
+              if (m.qualityTag == 'fhd' || m.qualityTag == 'hd')
+                Positioned(
+                  top: 7, right: 7,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: m.qualityTag == 'fhd' ? kAmber : Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(4),
+                      border: m.qualityTag == 'fhd' ? null : Border.all(color: Colors.white38),
+                    ),
+                    child: Text(m.qualityTag.toUpperCase(),
+                        style: TextStyle(
+                            color: m.qualityTag == 'fhd' ? Colors.black : Colors.white,
+                            fontSize: 10, fontWeight: FontWeight.w800)),
+                  ),
+                ),
               // Chọn/hover: phủ tối nhẹ + nút play tròn hiện dần ở giữa.
               Positioned.fill(
                 child: IgnorePointer(

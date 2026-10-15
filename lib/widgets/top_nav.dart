@@ -57,7 +57,7 @@ class TopNav extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: f ? kRed : Colors.transparent, width: 2),
               ),
-              child: const BrandLogo(height: 30),
+              child: const BrandLogo(height: 36),
             ),
           ),
           const SizedBox(width: 18),

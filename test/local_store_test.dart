@@ -62,4 +62,23 @@ void main() {
         episodeName: 'Tập 06', name: 'Phim');
     expect(store.progressFor('pa:phim')!.positionSeconds, 0);
   });
+
+  test('tìm kiếm gần đây: mới nhất lên đầu, gộp trùng, tối đa 8, xoá được', () async {
+    final s = LocalStore();
+    await s.init();
+    for (final k in ['a1', 'b2', 'c3']) {
+      await s.addRecentSearch(k);
+    }
+    await s.addRecentSearch('A1'); // trùng (khác hoa thường) -> lên đầu, không nhân đôi
+    expect(s.recentSearches, ['A1', 'c3', 'b2']);
+    await s.addRecentSearch('x'); // quá ngắn -> bỏ qua
+    for (var i = 0; i < 10; i++) {
+      await s.addRecentSearch('k$i');
+    }
+    expect(s.recentSearches.length, 8);
+    await s.removeRecentSearch('k9');
+    expect(s.recentSearches.first, 'k8');
+    await s.clearRecentSearches();
+    expect(s.recentSearches, isEmpty);
+  });
 }

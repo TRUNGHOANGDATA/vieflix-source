@@ -238,6 +238,8 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                       'genres': d.genres.map((g) => g.name).toList(),
                     });
                     await store.toggleFavorite(favMovie);
+                    // Báo màn Yêu thích / trang chủ vẽ lại (storeProvider không tự báo).
+                    ref.read(homeRefreshProvider.notifier).state++;
                     setState(() {});
                   },
                   icon: Icon(fav ? Icons.favorite : Icons.favorite_border, color: fav ? kRed : Colors.white),

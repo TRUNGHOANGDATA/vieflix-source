@@ -323,6 +323,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   @override
   void dispose() {
+    // Rời trình phát mà còn toàn màn hình -> trả cửa sổ về như cũ (gọi thẳng
+    // kênh, không qua _setFullScreen vì widget đang huỷ, không setState được).
+    if (_fullScreen) _windowCh.invokeMethod('setFullScreen', false).catchError((_) => null);
     HardwareKeyboard.instance.removeHandler(_onKey);
     WidgetsBinding.instance.removeObserver(this);
     // Trả lại thanh trạng thái / điều hướng cho các màn còn lại.
@@ -808,6 +811,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// chủ. Cờ này chốt lại: đã pop một lần thì không nhận phím nào nữa.
   bool _exiting = false;
 
+  /// Windows: cửa sổ đang toàn màn hình (bỏ khung, phủ kín màn). Android/iPad
+  /// trình phát vốn đã kín màn nên không có nút này.
+  bool _fullScreen = false;
+  static const _windowCh = MethodChannel('vieflix/window');
+
+  /// Bật/tắt toàn màn hình qua kênh "vieflix/window" của runner Windows
+  /// (windows/runner/flutter_window.cpp) — Flutter không có sẵn cho desktop.
+  Future<void> _setFullScreen(bool on) async {
+    if (!Platform.isWindows) return;
+    try {
+      final r = await _windowCh.invokeMethod<bool>('setFullScreen', on);
+      if (mounted) setState(() => _fullScreen = r ?? on);
+    } catch (e) {
+      vlog('player', 'khong doi duoc toan man hinh: $e');
+    }
+  }
+
   bool _onKey(KeyEvent e) {
     if (e is! KeyDownEvent) return false;
     _lastFlutterKey = DateTime.now();
@@ -819,6 +839,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// lý, để hai đường không bao giờ lệch hành vi nhau.
   static const Map<String, LogicalKeyboardKey> _kPageKeyMap = {
     'Escape': LogicalKeyboardKey.escape,
+    'F11': LogicalKeyboardKey.f11,
     'ArrowLeft': LogicalKeyboardKey.arrowLeft,
     'ArrowRight': LogicalKeyboardKey.arrowRight,
     'ArrowUp': LogicalKeyboardKey.arrowUp,
@@ -865,7 +886,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       }
       if (k == LogicalKeyboardKey.arrowDown) { _stopAutoNext(block: true); return true; }
     }
+    if (k == LogicalKeyboardKey.f11 && Platform.isWindows) {
+      _setFullScreen(!_fullScreen);
+      return true;
+    }
     if (k == LogicalKeyboardKey.escape) {
+      // Đang toàn màn hình: ESC chỉ thu cửa sổ lại (như trình duyệt/YouTube),
+      // bấm ESC lần nữa mới thoát phim.
+      if (_fullScreen) {
+        _setFullScreen(false);
+        return true;
+      }
       if (mounted && Navigator.canPop(context)) {
         _exit();
         return true;
@@ -1420,6 +1451,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             const SizedBox(width: 10),
             Text('${_fmt(_pos)} / ${_fmt(_dur)}',
                 style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+            if (Platform.isWindows) ...[
+              const SizedBox(width: 6),
+              IconButton(
+                tooltip: _fullScreen ? 'Thoát toàn màn hình (Esc / F11)' : 'Toàn màn hình (F11)',
+                icon: Icon(_fullScreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.white, size: 26),
+                onPressed: () => _setFullScreen(!_fullScreen),
+              ),
+            ],
           ]),
           // Bấm/kéo để tua. BẮT BUỘC phải tua được: thanh này che thanh tua của
           // trang nguồn khi hiện, nếu chỉ để hiển thị thì người dùng chuột mất

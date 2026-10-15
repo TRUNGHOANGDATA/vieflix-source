@@ -83,6 +83,7 @@ flutter:
   # TV đỡ phình.
   assets:
     - assets/images/app_bg.jpg
+    - assets/images/logo.png
 
   fonts:
     - family: Be Vietnam Pro

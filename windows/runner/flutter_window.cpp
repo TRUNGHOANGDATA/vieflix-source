@@ -2,6 +2,8 @@
 
 #include <optional>
 
+#include <flutter/standard_method_codec.h>
+
 #include "flutter/generated_plugin_registrant.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -26,6 +28,24 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+
+  // Toàn màn hình cho trình phát (Windows không có sẵn; Android/iPad tự kín màn).
+  window_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), "vieflix/window",
+      &flutter::StandardMethodCodec::GetInstance());
+  window_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() == "setFullScreen") {
+          const auto* on = std::get_if<bool>(call.arguments());
+          SetFullScreen(on != nullptr && *on);
+          result->Success(flutter::EncodableValue(IsFullScreen()));
+        } else if (call.method_name() == "isFullScreen") {
+          result->Success(flutter::EncodableValue(IsFullScreen()));
+        } else {
+          result->NotImplemented();
+        }
+      });
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
@@ -68,4 +88,36 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+}
+
+bool FlutterWindow::IsFullScreen() {
+  // Toàn màn hình = đã bỏ khung cửa sổ (WS_OVERLAPPEDWINDOW).
+  return (GetWindowLong(GetHandle(), GWL_STYLE) & WS_OVERLAPPEDWINDOW) == 0;
+}
+
+// Cách chuẩn trên Win32: bỏ khung rồi phủ kín màn hình đang chứa cửa sổ; tắt thì
+// trả khung + đúng vị trí/cỡ cũ (kể cả đang phóng to). Nội dung Flutter tự co
+// giãn theo vì Win32Window xử lý WM_SIZE cho cửa sổ con.
+void FlutterWindow::SetFullScreen(bool on) {
+  HWND hwnd = GetHandle();
+  if (hwnd == nullptr || on == IsFullScreen()) return;
+  DWORD style = GetWindowLong(hwnd, GWL_STYLE);
+  if (on) {
+    MONITORINFO mi{sizeof(MONITORINFO)};
+    if (!GetWindowPlacement(hwnd, &saved_placement_) ||
+        !GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi)) {
+      return;
+    }
+    SetWindowLong(hwnd, GWL_STYLE, style & ~WS_OVERLAPPEDWINDOW);
+    SetWindowPos(hwnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
+                 mi.rcMonitor.right - mi.rcMonitor.left,
+                 mi.rcMonitor.bottom - mi.rcMonitor.top,
+                 SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+  } else {
+    SetWindowLong(hwnd, GWL_STYLE, style | WS_OVERLAPPEDWINDOW);
+    SetWindowPlacement(hwnd, &saved_placement_);
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER |
+                     SWP_FRAMECHANGED);
+  }
 }

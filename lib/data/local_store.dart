@@ -47,6 +47,7 @@ class LocalStore {
   static const _kFav = 'favorites_v1';
   static const _kProg = 'progress_v1';
   static const _kTmdb = 'tmdb_key';
+  static const _kRecentSearch = 'recent_search_v1'; // từ khoá tìm gần đây, mới nhất trước
   static const _kSrcOff = 'sources_off_v1'; // các nguồn phim BỊ TẮT
   static const _kSrcSeeded = 'sources_seeded_v1'; // đã đặt mặc định theo máy chưa
   static const _maxProgress = 200; // Giữ 200 phim xem gần nhất
@@ -122,6 +123,23 @@ class LocalStore {
   // --- Khóa TMDB (rating) ---
   String get tmdbKey => _p.getString(_kTmdb) ?? '';
   Future<void> setTmdbKey(String k) async => _p.setString(_kTmdb, k.trim());
+
+  // --- Tìm kiếm gần đây ---
+  List<String> get recentSearches => _p.getStringList(_kRecentSearch) ?? const [];
+
+  /// Đưa [keyword] lên đầu danh sách (trùng thì gộp, không phân biệt hoa thường),
+  /// giữ tối đa 8 mục.
+  Future<void> addRecentSearch(String keyword) async {
+    final k = keyword.trim();
+    if (k.length < 2) return;
+    final list = [k, ...recentSearches.where((e) => e.toLowerCase() != k.toLowerCase())];
+    await _p.setStringList(_kRecentSearch, list.take(8).toList());
+  }
+
+  Future<void> removeRecentSearch(String keyword) async =>
+      _p.setStringList(_kRecentSearch, recentSearches.where((e) => e != keyword).toList());
+
+  Future<void> clearRecentSearches() async => _p.remove(_kRecentSearch);
 
   // --- Nguồn phim bật/tắt ---
   // Lưu danh sách nguồn BỊ TẮT: nguồn mới thêm về sau mặc định là BẬT.
