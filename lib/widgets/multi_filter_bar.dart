@@ -7,6 +7,10 @@ import 'tv_focusable.dart';
 /// Thanh lọc GHÉP: 4 nút Loại / Thể loại / Quốc gia / Năm, mỗi nút GIỮ lựa chọn
 /// RIÊNG. Chọn nút này KHÔNG xoá nút kia — khác `TvFilterBar` (một chiều).
 ///
+/// Bấm nút -> DANH SÁCH THẢ XUỐNG ngay dưới nút (như combo box), chọn một mục là
+/// đóng. Trước 10/2026 là hộp thoại trải các viên thuốc ngang cả màn hình — chủ
+/// dự án chê xấu, chậm chọn.
+///
 /// Dùng cho màn Thư viện, nơi lọc ghép nhiều chiều (phimapi kham được cả 4;
 /// nguonc kham một chiều cấu trúc + năm — phần đó do lớp nguồn tự xử).
 class MultiFilterBar extends StatelessWidget {
@@ -28,14 +32,26 @@ class MultiFilterBar extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       padding: padding,
       child: Row(children: [
-        _btn(context, 'Loại', current.type, {for (final t in kTypes) t.slug: t.label},
-            (v) => onChanged(current.copyWith(type: v, clearType: v == null))),
-        _btn(context, 'Thể loại', current.genre, {for (final g in kGenres) g.slug: g.label},
-            (v) => onChanged(current.copyWith(genre: v, clearGenre: v == null))),
-        _btn(context, 'Quốc gia', current.country, {for (final c in kCountries) c.slug: c.label},
-            (v) => onChanged(current.copyWith(country: v, clearCountry: v == null))),
-        _btn(context, 'Năm', current.year, {for (final y in kYears) y: y},
-            (v) => onChanged(current.copyWith(year: v, clearYear: v == null))),
+        _FilterMenu(
+          label: 'Loại', value: current.type,
+          options: {for (final t in kTypes) t.slug: t.label},
+          onPick: (v) => onChanged(current.copyWith(type: v, clearType: v == null)),
+        ),
+        _FilterMenu(
+          label: 'Thể loại', value: current.genre,
+          options: {for (final g in kGenres) g.slug: g.label},
+          onPick: (v) => onChanged(current.copyWith(genre: v, clearGenre: v == null)),
+        ),
+        _FilterMenu(
+          label: 'Quốc gia', value: current.country,
+          options: {for (final c in kCountries) c.slug: c.label},
+          onPick: (v) => onChanged(current.copyWith(country: v, clearCountry: v == null)),
+        ),
+        _FilterMenu(
+          label: 'Năm', value: current.year,
+          options: {for (final y in kYears) y: y},
+          onPick: (v) => onChanged(current.copyWith(year: v, clearYear: v == null)),
+        ),
         if (hasAny)
           Padding(
             padding: const EdgeInsets.only(left: 4),
@@ -59,96 +75,107 @@ class MultiFilterBar extends StatelessWidget {
       ]),
     );
   }
+}
 
-  Widget _btn(BuildContext context, String label, String? value,
-      Map<String, String> options, ValueChanged<String?> onPick) {
-    final active = value != null;
-    final valueLabel = active ? (options[value] ?? value) : label;
+/// Một nút lọc + danh sách thả xuống của nó.
+class _FilterMenu extends StatefulWidget {
+  final String label;
+  final String? value; // null = Tất cả
+  final Map<String, String> options;
+  final ValueChanged<String?> onPick;
+  const _FilterMenu({required this.label, required this.value, required this.options, required this.onPick});
+  @override
+  State<_FilterMenu> createState() => _FilterMenuState();
+}
+
+class _FilterMenuState extends State<_FilterMenu> {
+  final _ctl = MenuController();
+  // Mục đang chọn (hoặc "Tất cả") — mở danh sách là con trỏ remote đậu ngay đó.
+  final _focusTarget = FocusNode(debugLabel: 'filter-current');
+
+  @override
+  void dispose() {
+    _focusTarget.dispose();
+    super.dispose();
+  }
+
+  void _toggleOpen() {
+    if (_ctl.isOpen) {
+      _ctl.close();
+      return;
+    }
+    _ctl.open();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _ctl.isOpen) _focusTarget.requestFocus();
+    });
+  }
+
+  static final _itemStyle = ButtonStyle(
+    foregroundColor: const WidgetStatePropertyAll(Colors.white),
+    iconColor: const WidgetStatePropertyAll(Colors.white70),
+    // Mục đang được remote chọn phải nổi rõ trên TV.
+    backgroundColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.focused) ? kRed.withValues(alpha: 0.35) : null),
+    overlayColor: WidgetStatePropertyAll(kRed.withValues(alpha: 0.18)),
+    minimumSize: const WidgetStatePropertyAll(Size(220, 44)),
+    padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 16)),
+    textStyle: const WidgetStatePropertyAll(TextStyle(fontSize: 14, fontFamily: kBrandFont)),
+  );
+
+  Widget _item(String text, String? value) {
+    final selected = widget.value == value;
+    return MenuItemButton(
+      focusNode: selected ? _focusTarget : null,
+      style: _itemStyle,
+      onPressed: () => widget.onPick(value),
+      trailingIcon: selected ? const Icon(Icons.check, color: kRed, size: 18) : null,
+      child: Text(text, style: TextStyle(fontWeight: selected ? FontWeight.w700 : FontWeight.w400)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = widget.value != null;
+    final text = active ? (widget.options[widget.value] ?? widget.value!) : widget.label;
     return Padding(
       padding: const EdgeInsets.only(right: 10),
-      child: FocusHighlight(
-        scale: 1.0,
-        onPressed: () async {
-          final picked = await _openPicker(context, label, value, options);
-          if (picked == null) return; // huỷ hộp thoại, không đổi gì
-          onPick(picked.isEmpty ? null : picked); // '' = bỏ chọn chiều này
-        },
-        builder: (f) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: active ? kRed : kSurface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: f ? kRed : Colors.white12, width: f ? 2 : 1.5),
-            boxShadow: f ? [BoxShadow(color: kRed.withValues(alpha: 0.45), blurRadius: 14)] : null,
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Text(valueLabel,
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: (active || f) ? FontWeight.bold : FontWeight.w500)),
-            const SizedBox(width: 6),
-            Icon(active ? Icons.check : Icons.arrow_drop_down,
-                color: Colors.white70, size: active ? 16 : 20),
-          ]),
+      child: MenuAnchor(
+        controller: _ctl,
+        alignmentOffset: const Offset(0, 6),
+        style: MenuStyle(
+          backgroundColor: const WidgetStatePropertyAll(Color(0xFF1C1B27)),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          maximumSize: const WidgetStatePropertyAll(Size(300, 420)),
+          padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
+          shape: WidgetStatePropertyAll(RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: Colors.white12),
+          )),
         ),
-      ),
-    );
-  }
-
-  Future<String?> _openPicker(BuildContext context, String label,
-      String? activeValue, Map<String, String> options) {
-    return showDialog<String>(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (ctx) => Dialog(
-        backgroundColor: const Color(0xFF15171F),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 40),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Chọn $label',
-                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 18),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Wrap(spacing: 10, runSpacing: 10, children: [
-                    _opt(ctx, 'Tất cả $label', '', activeValue == null),
-                    for (final e in options.entries)
-                      _opt(ctx, e.value, e.key, activeValue == e.key),
-                  ]),
-                ),
-              ),
-            ],
+        menuChildren: [
+          _item('Tất cả ${widget.label.toLowerCase()}', null),
+          for (final e in widget.options.entries) _item(e.value, e.key),
+        ],
+        builder: (context, ctl, _) => FocusHighlight(
+          scale: 1.0,
+          onPressed: _toggleOpen,
+          builder: (f) => Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: active ? kRed : kSurface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: f ? kRed : Colors.white12, width: f ? 2 : 1.5),
+              boxShadow: f ? [BoxShadow(color: kRed.withValues(alpha: 0.45), blurRadius: 14)] : null,
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(text,
+                  style: TextStyle(
+                      color: Colors.white, fontSize: 14, fontWeight: (active || f) ? FontWeight.bold : FontWeight.w500)),
+              const SizedBox(width: 6),
+              Icon(ctl.isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down, color: Colors.white70, size: 20),
+            ]),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _opt(BuildContext ctx, String text, String value, bool selected) {
-    return FocusHighlight(
-      autofocus: selected,
-      scale: 1.0,
-      onPressed: () => Navigator.pop(ctx, value),
-      builder: (f) => AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-        decoration: BoxDecoration(
-          color: selected ? kRed : (f ? kRed.withValues(alpha: 0.25) : kSurface),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: (f || selected) ? kRed : Colors.white12, width: f ? 2 : 1.5),
-          boxShadow: f ? [BoxShadow(color: kRed.withValues(alpha: 0.45), blurRadius: 14)] : null,
-        ),
-        child: Text(text,
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: (selected || f) ? FontWeight.bold : FontWeight.w500)),
       ),
     );
   }
