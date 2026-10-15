@@ -207,6 +207,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// báo lỗi thay vì để người xem ngồi nhìn màn hình đen không biết chuyện gì.
   String? _webError;
 
+  /// Lượt nạp ([_navSeq]) đã xử lý vụ bị máy chủ chặn — mỗi lượt chỉ xử lý một
+  /// lần (khung chính 403 có thể báo nhiều nhịp).
+  int _blockedSeq = -1;
+
   // ---- Trình phát native (chỉ dùng khi có link m3u8) ----
   // Có link video trực tiếp thì phát thẳng, khỏi qua trang embed: không quảng
   // cáo, không cần cầu nối JS, vị trí xem đọc chính xác từng giây.
@@ -1035,6 +1039,37 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _loadEpisode(ep, keep);
   }
 
+  /// Trang phát của nguồn bị máy chủ chặn (Cloudflare 403 "Sorry, you have
+  /// been blocked").
+  ///
+  /// ⚠️ 10/2026: streamc.xyz chặn TV box (Android) trong khi Windows cùng lúc
+  /// vẫn xem bình thường — chưa rõ vì sao (chưa lấy được nhật ký TV). Dòng
+  /// nhật ký ở đây ghi có đi qua cổng Referer hay không để lần sau phân biệt
+  /// "mất Referer" với "bị chặn theo thiết bị/mạng".
+  ///
+  /// Xử lý: tự đổi sang nguồn khác có đúng tập này (ưu tiên phát thẳng); không
+  /// có thì hiện bảng lỗi tiếng Việt thay cho trang chặn tiếng Anh trắng xoá.
+  void _onEmbedBlocked() {
+    if (!mounted || _blockedSeq == _navSeq) return;
+    _blockedSeq = _navSeq;
+    final from = widget.sources[_srcIdx];
+    vlog('embed', 'BI CHAN 403 tai $_url (qua_cong=${_navUrl != null && _navUrl != _url}, '
+        'trang_cuoi=$_lastNavStart)');
+    final alt = blockedFallbackIndex(widget.sources, _srcIdx, _idx, from.provider);
+    if (alt != null) {
+      final to = widget.sources[alt];
+      vlog('embed', 'tu doi sang nguon ${to.label}');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: kRed,
+        content: Text('Nguồn ${from.provider} đang chặn máy này — đã tự chuyển sang ${to.label}'),
+      ));
+      _switchSource(alt);
+      return;
+    }
+    setState(() => _webError =
+        'Máy chủ của nguồn ${from.provider} đang chặn thiết bị này. Thử lại sau ít phút, hoặc chọn nguồn khác.');
+  }
+
   /// Bảng chọn nguồn: kiểu bảng của TvFilterBar, D-pad bấm được.
   /// Bảng báo khi trang phát của nguồn không mở được.
   ///
@@ -1614,8 +1649,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 }
                 setState(() => _webError = err.description);
               },
-              onReceivedHttpError: (c, req, resp) =>
-                  vlog('webview', 'HTTP ${resp.statusCode} khi tai ${req.url}'),
+              onReceivedHttpError: (c, req, resp) {
+                vlog('webview', 'HTTP ${resp.statusCode} khi tai ${req.url}');
+                // Khung chính của trang phát nguonc ăn 403 = Cloudflare chặn
+                // ("Sorry, you have been blocked"). Đừng để trang trắng đó nằm
+                // trên màn hình — xem _onEmbedBlocked.
+                if (req.isForMainFrame != false &&
+                    resp.statusCode == 403 &&
+                    RefererGate.needsGate(req.url.toString())) {
+                  _onEmbedBlocked();
+                }
+              },
               shouldOverrideUrlLoading: (c, action) async {
                 final u = action.request.url?.toString() ?? '';
                 // Trang cổng Referer là của chính app, không bao giờ là quảng cáo.

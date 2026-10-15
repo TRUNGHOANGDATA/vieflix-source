@@ -85,3 +85,21 @@ int? matchEpisodeIndex(List<Episode> from, int index, List<Episode> to) {
   if (noNumbers && index < to.length) return index;
   return null;
 }
+
+/// Nguồn thay thế khi nguồn đang phát bị máy chủ CHẶN (Cloudflare 403).
+///
+/// Bỏ qua các bản cùng [blockedProvider] (cùng máy chủ thì cũng bị chặn), chỉ
+/// lấy nguồn có đúng tập đang xem, ưu tiên phát thẳng (hls) vì không đi qua
+/// trang web nào để bị chặn tiếp. Không có thì trả null.
+int? blockedFallbackIndex(List<StreamSource> sources, int current, int episode, String blockedProvider) {
+  if (current < 0 || current >= sources.length) return null;
+  final from = sources[current].episodes;
+  int? best;
+  for (int i = 0; i < sources.length; i++) {
+    final s = sources[i];
+    if (i == current || s.provider == blockedProvider) continue;
+    if (matchEpisodeIndex(from, episode, s.episodes) == null) continue;
+    if (best == null || (s.kind == StreamKind.hls && sources[best].kind != StreamKind.hls)) best = i;
+  }
+  return best;
+}

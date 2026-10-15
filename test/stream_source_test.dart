@@ -72,6 +72,31 @@ void main() {
     });
   });
 
+  group('blockedFallbackIndex', () {
+    StreamSource src(String provider, StreamKind kind, List<String> eps) => StreamSource(
+        provider: provider, movieSlug: 'x', serverName: 'Vietsub', lang: 'Vietsub',
+        kind: kind, episodes: [for (final e in eps) _e(e)]);
+
+    test('nguonc bị chặn -> bỏ bản nguonc khác, ưu tiên phimapi phát thẳng có đúng tập', () {
+      final sources = [
+        src('nguonc', StreamKind.embed, ['1', '2']), // đang phát, bị chặn
+        src('nguonc', StreamKind.embed, ['1', '2']), // cùng máy chủ -> cũng bị chặn
+        src('phimapi', StreamKind.embed, ['Tập 01', 'Tập 02']),
+        src('phimapi', StreamKind.hls, ['Tập 01', 'Tập 02']),
+      ];
+      expect(blockedFallbackIndex(sources, 0, 1, 'nguonc'), 3);
+    });
+
+    test('không nguồn nào có tập đó -> null (để hiện bảng lỗi)', () {
+      final sources = [
+        src('nguonc', StreamKind.embed, ['1', '2', '3']),
+        src('phimapi', StreamKind.hls, ['Tập 01']),
+      ];
+      expect(blockedFallbackIndex(sources, 0, 2, 'nguonc'), isNull);
+      expect(blockedFallbackIndex([sources.first], 0, 0, 'nguonc'), isNull);
+    });
+  });
+
   group('matchEpisodeIndex', () {
     final nguonc = [_e('1'), _e('2'), _e('3')];
     final phimapi = [_e('Tập 01'), _e('Tập 02'), _e('Tập 03'), _e('Tập 04')];
