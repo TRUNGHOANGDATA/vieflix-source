@@ -1614,7 +1614,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               key: ValueKey('vf-web-$_navSeq'),
               // Windows: môi trường WebView2 đã mở khóa autoplay (main.dart).
               webViewEnvironment: webViewEnvironment,
-              initialUrlRequest: URLRequest(url: WebUri(nav)),
+              // Android: Referer gắn thẳng vào đây thay cho cổng (xem
+              // RefererGate.headerInsteadOfGate). Nơi khác: null như cũ.
+              initialUrlRequest: URLRequest(url: WebUri(nav), headers: RefererGate.headerFor(nav)),
               initialSettings: InAppWebViewSettings(
                 contentBlockers: adContentBlockers(),
                 javaScriptCanOpenWindowsAutomatically: false,

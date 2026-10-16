@@ -30,6 +30,29 @@ class RefererGate {
   static final Map<String, String> _targets = {};
   static int _counter = 0;
 
+  /// Referer gắn THẲNG vào yêu cầu nạp trang trên Android (xem [headerFor]).
+  /// Giống hệt gốc trang cổng sinh ra trên Windows — giá trị đã chạy thật.
+  static const kReferer = 'http://127.0.0.1/';
+
+  /// Android: KHÔNG đi cổng mà gắn thẳng header Referer.
+  ///
+  /// ⚠️ Vì sao (10/2026, TV box ăn 403 "Sorry, you have been blocked"):
+  /// flutter_inappwebview trên Android, khi bật shouldOverrideUrlLoading, HUỶ
+  /// mọi cú điều hướng khung chính rồi tự nạp lại bằng `webView.loadUrl(url,
+  /// requestHeaders)` (InAppWebViewClient.allowShouldOverrideUrlLoading). Cú
+  /// `location.replace` của trang cổng vì thế bị nạp lại từ phía app — MẤT
+  /// Referer — và streamc.xyz chặn. Ngược lại Android nhận header Referer tự đặt
+  /// trong lần nạp đầu (khác WebView2 trên Windows vứt bỏ nó), nên mở thẳng.
+  /// Đo bằng Playwright: không Referer -> 403, có Referer -> 200.
+  static bool get headerInsteadOfGate => debugHeaderInsteadOfGate ?? Platform.isAndroid;
+
+  /// Chỉ cho test (máy chạy test là Windows): ép đi nhánh Android.
+  static bool? debugHeaderInsteadOfGate;
+
+  /// Header cần gắn khi nạp [url] (chỉ Android + host chặn hotlink).
+  static Map<String, String>? headerFor(String url) =>
+      headerInsteadOfGate && needsGate(url) ? const {'Referer': kReferer} : null;
+
   /// Những trang embed cần đi vòng qua cổng. Chỉ gắn cho host đã biết là chặn
   /// hotlink, tránh làm chậm/sai các nguồn embed khác.
   static bool needsGate(String url) =>
@@ -80,7 +103,7 @@ class RefererGate {
   /// Trục trặc gì (không mở được cổng) thì trả lại chính [target] — thà thử nạp
   /// thẳng rồi báo lỗi còn hơn không mở gì cả.
   static Future<String> urlFor(String target) async {
-    if (!needsGate(target)) return target;
+    if (!needsGate(target) || headerInsteadOfGate) return target;
     try {
       final port = await _ensureServer();
       if (_targets.length > 4) _targets.clear(); // đổi tập/nguồn liên tục

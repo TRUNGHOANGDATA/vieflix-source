@@ -6,6 +6,23 @@ import 'package:app_xem_phim/data/referer_gate.dart';
 void main() {
   tearDown(() => RefererGate.shutdown());
 
+  test('Android: KHÔNG qua cổng, gắn thẳng Referer (cổng làm mất Referer trên Android)', () async {
+    RefererGate.debugHeaderInsteadOfGate = true;
+    addTearDown(() => RefererGate.debugHeaderInsteadOfGate = null);
+    const target = 'https://embed11.streamc.xyz/embed.php?hash=abc';
+    expect(await RefererGate.urlFor(target), target);
+    expect(RefererGate.headerFor(target), {'Referer': 'http://127.0.0.1/'});
+    expect(RefererGate.headerFor('https://player.phimapi.com/x'), isNull);
+  });
+
+  test('Windows/iPad: vẫn đi cổng, không gắn header', () async {
+    RefererGate.debugHeaderInsteadOfGate = false;
+    addTearDown(() => RefererGate.debugHeaderInsteadOfGate = null);
+    const target = 'https://embed11.streamc.xyz/embed.php?hash=abc';
+    expect(RefererGate.headerFor(target), isNull);
+    expect(await RefererGate.urlFor(target), startsWith('http://127.0.0.1:'));
+  });
+
   test('chỉ đi vòng qua cổng với nguồn chặn hotlink', () {
     expect(RefererGate.needsGate('https://embed15.streamc.xyz/embed.php?hash=a'), isTrue);
     expect(RefererGate.needsGate('https://player.phimapi.com/x'), isFalse);
