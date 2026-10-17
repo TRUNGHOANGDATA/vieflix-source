@@ -398,7 +398,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _nsubs.add(p.stream.position.listen((d) {
       if (!mounted || !_native) return;
       final pos = d.inMilliseconds / 1000.0;
-      setState(() => _pos = pos);
+      // ⚠️ mpv báo vị trí THEO TỪNG KHUNG HÌNH (25–60 lần/giây, media_kit không
+      // giãn nhịp). Trước đây mỗi lần đều dựng lại cả màn hình + cứ 3 lần lại ghi
+      // đĩa (~10 lần/giây) → box TV yếu giật hình. Giờ chỉ vẽ lại khi sang giây mới.
+      final newSecond = pos.floor() != _pos.floor();
+      _pos = pos;
+      if (!newSecond) return;
+      setState(() {});
       // Lưu vị trí xuống đĩa mỗi ~3 giây, giống đường WebView.
       if (_dur > 0 && pos > 0) {
         _saveTick++;
@@ -465,6 +471,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             await plat.setProperty('cache', 'yes');
             await plat.setProperty('cache-secs', '30');
             await plat.setProperty('demuxer-readahead-secs', '30');
+            // Box TV yếu (GPU Mali đời cũ): bộ lọc phóng ảnh mặc định của mpv
+            // (spline36…) chạy cho MỌI khung hình, kể cả màu khi phim 4:2:0 → rớt
+            // khung. Dùng đúng bộ "fast" của mpv (song tuyến) — trên TV khó thấy khác.
+            if (Platform.isAndroid) {
+              for (final e in const {
+                'scale': 'bilinear', 'dscale': 'bilinear', 'cscale': 'bilinear',
+                'dither': 'no', 'correct-downscaling': 'no', 'linear-downscaling': 'no',
+                'sigmoid-upscaling': 'no', 'hdr-compute-peak': 'no',
+              }.entries) {
+                await plat.setProperty(e.key, e.value);
+              }
+            }
           }
         } catch (e) {
           vlog('player', 'khong dat duoc cache mpv: $e');

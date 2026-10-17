@@ -51,6 +51,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- ⚠️ Vẽ bằng Skia thay cho Impeller. Box TV đời thấp (GPU Mali cũ) không
+             có Vulkan dùng được → Impeller rơi về OpenGL ES, chậm hơn Skia rõ rệt
+             → lướt menu và phát phim bị giật. Bỏ dòng này nếu sau này Flutter gỡ Skia. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
     </application>
 
     <queries>
