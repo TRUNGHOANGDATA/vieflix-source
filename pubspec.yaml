@@ -56,6 +56,9 @@ dependencies:
   # nguonc) thì không, nên iPad tự tắt màn hình giữa lúc đang phát. Khai báo
   # thẳng để tự gọi được cho MỌI đường phát.
   wakelock_plus: ^1.8.0
+  # Android/TV phát m3u8 bằng ExoPlayer + SurfaceView (như FPT Play): mpv qua
+  # media_kit giật trên box chip yếu. Windows/iPad vẫn dùng media_kit.
+  video_player: ^2.14.1
 
 dev_dependencies:
   flutter_test:

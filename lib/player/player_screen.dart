@@ -11,6 +11,7 @@ import '../data/referer_gate.dart';
 import '../data/movie_source.dart' show sourceOfSlug, kSrcNguonc;
 import '../data/app_log.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../main.dart' show webViewEnvironment;
 import '../models/episode.dart';
@@ -216,6 +217,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   // cáo, không cần cầu nối JS, vị trí xem đọc chính xác từng giây.
   Player? _np;
   VideoController? _nvc;
+  // Android/TV: ExoPlayer thay mpv (xem _openExo).
+  static final bool _useExo = Platform.isAndroid;
+  VideoPlayerController? _exo;
+  int _exoSeq = 0; // tăng mỗi lần mở/đóng -> cú mở cũ đang chờ lọc QC tự bỏ
   final List<StreamSubscription> _nsubs = [];
   bool _native = false;      // đang phát bằng player native hay WebView
   bool _hlsFailed = false;   // hls lỗi -> đã rơi về embed, đừng thử lại vòng vo
@@ -384,6 +389,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// vị trí / thời lượng / trạng thái phát ra.
   Future<void> _openNative(String url, double startAt) async {
     _closeNative();
+    if (_useExo) return _openExo(url, startAt);
     // Box Android yếu (vd KICKPI) phát HLS 1080p hay GIẬT vì mạng tải không kịp
     // libmpv. Tăng bộ đệm đọc trước để chịu được mạng phập phù. Windows mặc định
     // 32MB đã đủ nên không đụng (khỏi tốn RAM vô ích).
@@ -397,22 +403,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
     _nsubs.add(p.stream.position.listen((d) {
       if (!mounted || !_native) return;
-      final pos = d.inMilliseconds / 1000.0;
-      // ⚠️ mpv báo vị trí THEO TỪNG KHUNG HÌNH (25–60 lần/giây, media_kit không
-      // giãn nhịp). Trước đây mỗi lần đều dựng lại cả màn hình + cứ 3 lần lại ghi
-      // đĩa (~10 lần/giây) → box TV yếu giật hình. Giờ chỉ vẽ lại khi sang giây mới.
-      final newSecond = pos.floor() != _pos.floor();
-      _pos = pos;
-      if (!newSecond) return;
-      setState(() {});
-      // Lưu vị trí xuống đĩa mỗi ~3 giây, giống đường WebView.
-      if (_dur > 0 && pos > 0) {
-        _saveTick++;
-        if (_saveTick >= 3) {
-          _saveTick = 0;
-          widget.onPosition?.call(pos, _dur);
-        }
-      }
+      _onNativePos(d.inMilliseconds / 1000.0);
     }));
     _nsubs.add(p.stream.duration.listen((d) {
       if (!mounted || !_native) return;
@@ -439,31 +430,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
     _pendingSeek = startAt;
     _seekTries = 0;
-    // Bỏ quảng cáo chèn trong luồng trước khi phát. Quảng cáo nằm ngay trong
-    // playlist nên không có nút bỏ qua; lọc hỏng thì dùng link gốc như cũ.
-    String toPlay = url;
-    try {
-      final cleaned = await HlsPreparer().prepare(url);
-      vlog('ads', cleaned == null
-          ? 'KHONG loc duoc quang cao -> phat link goc'
-          : 'da cat ${cleaned.removedSegments} phan doan '
-              '= ${cleaned.removedSeconds.toStringAsFixed(1)}s');
-      if (cleaned != null && mounted && _native) {
-        toPlay = cleaned.url;
-        // Không hiện thông báo — người xem đã than dòng đỏ dưới màn hình gây
-        // chối mắt mỗi lần mở phim. Số liệu vẫn có trong nhật ký ở trên.
-      }
-    } catch (e) {
-      vlog('ads', 'loi khi loc quang cao: $e');
-    }
+    final toPlay = await _adFreeUrl(url);
     if (!mounted || !_native || _np != p) return; // đã đổi tập/nguồn lúc đang lọc
 
     try {
       await p.open(Media(toPlay), play: true);
       await p.setVolume(_vol * 100);
       // Đọc trước theo THỜI GIAN: giữ sẵn ~30s phim để một nhịp mạng chậm không
-      // làm khựng hình. Chỉ box Android yếu mới cần; lỗi thì bỏ qua (không sống
-      // chết vì tinh chỉnh này).
+      // làm khựng hình (iPad; Android đã sang ExoPlayer). Lỗi thì bỏ qua (không
+      // sống chết vì tinh chỉnh này).
       if (mobile) {
         try {
           final plat = p.platform;
@@ -471,18 +446,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             await plat.setProperty('cache', 'yes');
             await plat.setProperty('cache-secs', '30');
             await plat.setProperty('demuxer-readahead-secs', '30');
-            // Box TV yếu (GPU Mali đời cũ): bộ lọc phóng ảnh mặc định của mpv
-            // (spline36…) chạy cho MỌI khung hình, kể cả màu khi phim 4:2:0 → rớt
-            // khung. Dùng đúng bộ "fast" của mpv (song tuyến) — trên TV khó thấy khác.
-            if (Platform.isAndroid) {
-              for (final e in const {
-                'scale': 'bilinear', 'dscale': 'bilinear', 'cscale': 'bilinear',
-                'dither': 'no', 'correct-downscaling': 'no', 'linear-downscaling': 'no',
-                'sigmoid-upscaling': 'no', 'hdr-compute-peak': 'no',
-              }.entries) {
-                await plat.setProperty(e.key, e.value);
-              }
-            }
           }
         } catch (e) {
           vlog('player', 'khong dat duoc cache mpv: $e');
@@ -496,12 +459,110 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
+  /// Bỏ quảng cáo chèn trong luồng trước khi phát. Quảng cáo nằm ngay trong
+  /// playlist nên không có nút bỏ qua; lọc hỏng thì dùng link gốc như cũ.
+  Future<String> _adFreeUrl(String url) async {
+    try {
+      final cleaned = await HlsPreparer().prepare(url);
+      vlog('ads', cleaned == null
+          ? 'KHONG loc duoc quang cao -> phat link goc'
+          : 'da cat ${cleaned.removedSegments} phan doan '
+              '= ${cleaned.removedSeconds.toStringAsFixed(1)}s');
+      // Không hiện thông báo — người xem đã than dòng đỏ dưới màn hình gây
+      // chối mắt mỗi lần mở phim. Số liệu vẫn có trong nhật ký ở trên.
+      if (cleaned != null) return cleaned.url;
+    } catch (e) {
+      vlog('ads', 'loi khi loc quang cao: $e');
+    }
+    return url;
+  }
+
+  /// Vị trí phát mới từ player native (mpv hoặc ExoPlayer).
+  void _onNativePos(double pos) {
+    // ⚠️ mpv báo vị trí THEO TỪNG KHUNG HÌNH (25–60 lần/giây), ExoPlayer 10 lần/
+    // giây. Trước đây mỗi lần đều dựng lại cả màn hình + cứ 3 lần lại ghi đĩa →
+    // box TV yếu giật hình. Giờ chỉ vẽ lại khi sang giây mới.
+    final newSecond = pos.floor() != _pos.floor();
+    _pos = pos;
+    if (!newSecond) return;
+    setState(() {});
+    // Lưu vị trí xuống đĩa mỗi ~3 giây, giống đường WebView.
+    if (_dur > 0 && pos > 0) {
+      _saveTick++;
+      if (_saveTick >= 3) {
+        _saveTick = 0;
+        widget.onPosition?.call(pos, _dur);
+      }
+    }
+  }
+
+  /// Android/TV: phát m3u8 bằng ExoPlayer, vẽ thẳng lên SurfaceView — đúng cách
+  /// FPT Play/VieON/YouTube làm.
+  ///
+  /// ⚠️ ĐỪNG quay lại mpv trên Android. mpv (media_kit) phải chép từng khung
+  /// hình qua GPU 1–2 lần rồi Flutter mới ghép lên màn: box chip yếu chỉ ra vài
+  /// khung/giây ở MỌI nguồn (1.0.64 đã thử giảm tải mpv, vẫn giật), trong khi
+  /// FPT Play/VieON trên cùng box mượt. SurfaceView để chip giải mã đẩy hình
+  /// thẳng ra màn hình, GPU gần như không phải làm gì.
+  Future<void> _openExo(String url, double startAt) async {
+    final seq = ++_exoSeq;
+    _pendingSeek = startAt;
+    _seekTries = 0;
+    final toPlay = await _adFreeUrl(url);
+    if (!mounted || !_native || seq != _exoSeq) return; // đã đổi tập/nguồn lúc đang lọc
+
+    final c = VideoPlayerController.networkUrl(
+      Uri.parse(toPlay),
+      formatHint: VideoFormat.hls, // playlist lọc QC phục vụ ở 127.0.0.1, đuôi không chắc .m3u8
+      viewType: VideoViewType.platformView,
+    );
+    _exo = c;
+    var gotDur = false, ended = false;
+    String? lastErr;
+    c.addListener(() {
+      if (!mounted || !_native || _exo != c) return;
+      final v = c.value;
+      if (v.hasError && v.errorDescription != lastErr) {
+        lastErr = v.errorDescription;
+        vlog('player', 'exo bao loi: $lastErr');
+        _onNativeError(lastErr ?? 'exo loi');
+      }
+      if (!gotDur && v.duration > Duration.zero) {
+        gotDur = true;
+        setState(() => _dur = v.duration.inMilliseconds / 1000.0);
+        _applyPendingSeek();
+      }
+      if (v.isPlaying == _paused) setState(() => _paused = !v.isPlaying);
+      if (v.isCompleted && !ended) _armAutoNext();
+      ended = v.isCompleted;
+      _onNativePos(v.position.inMilliseconds / 1000.0);
+    });
+    try {
+      await c.initialize();
+      if (!mounted || _exo != c) return;
+      await c.setVolume(_vol);
+      await c.play();
+      setState(() {}); // đã biết tỉ lệ khung hình
+      _resumeApplied = true; // đường native tự lo bằng _applyPendingSeek
+      vlog('player', 'da mo exo OK: ${toPlay == url ? "link goc" : "playlist da loc"}');
+    } catch (e) {
+      vlog('player', 'MO EXO LOI: $e');
+      if (mounted && _exo == c) _fallbackToEmbed('$e');
+    }
+  }
+
+  /// Tua player native tới giây [sec].
+  void _nativeSeekTo(double sec) {
+    final d = Duration(milliseconds: (sec * 1000).round().clamp(0, 1 << 31));
+    _exo?.seekTo(d);
+    _np?.seek(d);
+  }
+
   /// Tua tới chỗ đang xem dở, và KIỂM LẠI xem có tới nơi thật không.
   /// mpv thỉnh thoảng vẫn nuốt lệnh tua đầu tiên trên luồng mạng, nên thử tối đa
   /// 3 lần rồi thôi — thà phát từ đầu còn hơn tua loạn cả buổi.
   void _applyPendingSeek() {
-    final p = _np;
-    if (p == null || !_native) return;
+    if ((_np == null && _exo == null) || !_native) return;
     final target = _pendingSeek;
     if (target <= 2 || _dur <= 0) return;
     if (target >= _dur - 5) {
@@ -509,7 +570,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       return;
     }
     _seekTries++;
-    p.seek(Duration(milliseconds: (target * 1000).round()));
+    _nativeSeekTo(target);
     Future.delayed(const Duration(seconds: 3), () {
       if (!mounted || !_native || _pendingSeek <= 2) return;
       // Tính là TỚI NƠI khi đã ở target trở đi: HLS nhảy theo khung hình khoá
@@ -537,6 +598,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _np?.dispose();
     _np = null;
     _nvc = null;
+    _exoSeq++; // huỷ cú mở ExoPlayer còn đang lọc quảng cáo dở
+    _exo?.dispose();
+    _exo = null;
   }
 
   Timer? _stallT;
@@ -600,6 +664,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// Khung hình của player native. Dùng lại đúng thanh điều khiển của app nên
   /// tắt hết điều khiển sẵn có của media_kit.
   Widget _nativeVideo() {
+    final e = _exo;
+    if (e != null && e.value.isInitialized) {
+      return ColoredBox(
+        color: Colors.black,
+        child: Center(
+          child: AspectRatio(aspectRatio: e.value.aspectRatio, child: VideoPlayer(e)),
+        ),
+      );
+    }
     final c = _nvc;
     if (c == null) {
       return const ColoredBox(
@@ -623,17 +696,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// Gửi lệnh xuống mọi khung (khung chính + iframe con) qua postMessage.
   /// Đang phát native thì đi thẳng vào player, khỏi qua cầu nối JS.
   void _cmd(String cmd, [double delta = 0]) {
-    final np = _np;
-    if (_native && np != null) {
+    final np = _np, exo = _exo;
+    if (_native && (np != null || exo != null)) {
       switch (cmd) {
         case 'toggle':
-          np.playOrPause();
+          if (exo != null) {
+            exo.value.isPlaying ? exo.pause() : exo.play();
+          } else {
+            np!.playOrPause();
+          }
         case 'seek':
-          np.seek(Duration(milliseconds: ((_pos + delta) * 1000).round().clamp(0, 1 << 31)));
+          _nativeSeekTo(_pos + delta);
         case 'seekto':
-          np.seek(Duration(milliseconds: (delta * 1000).round().clamp(0, 1 << 31)));
+          _nativeSeekTo(delta);
         case 'volume':
-          np.setVolume(delta * 100);
+          exo?.setVolume(delta);
+          np?.setVolume(delta * 100);
       }
       return;
     }
