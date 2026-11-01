@@ -221,6 +221,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   static final bool _useExo = Platform.isAndroid;
   VideoPlayerController? _exo;
   int _exoSeq = 0; // tăng mỗi lần mở/đóng -> cú mở cũ đang chờ lọc QC tự bỏ
+  Timer? _exoWatch; // canh đứng hình im lặng (xem _openExo)
   final List<StreamSubscription> _nsubs = [];
   bool _native = false;      // đang phát bằng player native hay WebView
   bool _hlsFailed = false;   // hls lỗi -> đã rơi về embed, đừng thử lại vòng vo
@@ -532,7 +533,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         setState(() => _dur = v.duration.inMilliseconds / 1000.0);
         _applyPendingSeek();
       }
-      if (v.isPlaying == _paused) setState(() => _paused = !v.isPlaying);
+      // ⚠️ ExoPlayer báo isPlaying=false cả lúc ĐANG CHỜ TẢI. Tính đó là "dừng" thì
+      // phim kẹt tải bị coi như người xem bấm dừng -> không bao giờ tự cứu (TV treo
+      // đen màn mãi, phải thoát ra mở lại).
+      final paused = !v.isPlaying && !v.isBuffering;
+      if (paused != _paused) setState(() => _paused = paused);
       if (v.isCompleted && !ended) _armAutoNext();
       ended = v.isCompleted;
       _onNativePos(v.position.inMilliseconds / 1000.0);
@@ -545,6 +550,32 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       setState(() {}); // đã biết tỉ lệ khung hình
       _resumeApplied = true; // đường native tự lo bằng _applyPendingSeek
       vlog('player', 'da mo exo OK: ${toPlay == url ? "link goc" : "playlist da loc"}');
+      // Canh ĐỨNG HÌNH IM LẶNG: kẹt tải mãi / đen màn mà ExoPlayer không báo lỗi gì
+      // thì _onNativeError không bao giờ được gọi. Vị trí đứng yên 15s khi không
+      // ai bấm dừng -> coi như lỗi (mở lại đúng chỗ). Chạy êm 60s -> xoá đếm số lần
+      // mở lại, để phim dài treo vài lần rải rác không bị đẩy sang trang có QC.
+      var lastPos = -1.0;
+      var still = 0, moving = 0;
+      _exoWatch = Timer.periodic(const Duration(seconds: 5), (_) {
+        if (!mounted || _exo != c || _paused || c.value.isCompleted) {
+          still = 0;
+          return;
+        }
+        if (_pos == lastPos) {
+          still += 5;
+          moving = 0;
+        } else {
+          still = 0;
+          moving += 5;
+          if (moving >= 60) _nativeRetries = 0;
+        }
+        lastPos = _pos;
+        if (still >= 15) {
+          still = 0;
+          vlog('player', 'exo dung hinh 15s tai ${_pos.toStringAsFixed(0)}s (buffering=${c.value.isBuffering})');
+          _onNativeError('exo dung hinh');
+        }
+      });
     } catch (e) {
       vlog('player', 'MO EXO LOI: $e');
       if (mounted && _exo == c) _fallbackToEmbed('$e');
@@ -599,6 +630,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _np = null;
     _nvc = null;
     _exoSeq++; // huỷ cú mở ExoPlayer còn đang lọc quảng cáo dở
+    _exoWatch?.cancel();
     _exo?.dispose();
     _exo = null;
   }
@@ -701,7 +733,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       switch (cmd) {
         case 'toggle':
           if (exo != null) {
-            exo.value.isPlaying ? exo.pause() : exo.play();
+            _paused ? exo.play() : exo.pause(); // isPlaying=false cả lúc chờ tải
           } else {
             np!.playOrPause();
           }
